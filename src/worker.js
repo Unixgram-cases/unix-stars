@@ -364,4 +364,12 @@ async function route(req, env, p) {
 
     case 'admin/password': {
       if (u !== OWNER) return E('Только владелец', 403);
-      const pw = String(b.password ||
+      const pw = String(b.password || '');
+      if (pw.length < 8) return E('Минимум 8 символов');
+      const salt = crypto.randomUUID();
+      await DB.prepare("INSERT INTO settings(k,v) VALUES('pass',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v").bind(salt + ':' + await hash(pw, salt)).run();
+      return J({ ok: 1 });
+    }
+  }
+  return E('Не найдено', 404);
+}
