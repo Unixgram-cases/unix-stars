@@ -1,82 +1,495 @@
 <!DOCTYPE html>
-<html lang="ru"><head><meta charset="utf-8">
+<html lang="ru">
+<head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Unix Stars</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f4f5f9;--card:#fff;--tx:#14161f;--mu:#6b7080;--ac:#6c4cff;--ok:#16a34a;--er:#dc2626;--bd:#dfe2ec}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1117;--card:#1a1d28;--tx:#eceef6;--mu:#8b90a3;--bd:#2a2e3d}}
-:root[data-theme="dark"]{--bg:#0f1117;--card:#1a1d28;--tx:#eceef6;--mu:#8b90a3;--bd:#2a2e3d}
-html{scroll-padding-top:env(safe-area-inset-top,0px)}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,sans-serif}
-.w{max-width:640px;margin:0 auto;padding:12px}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin:10px 0}
-button{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:10px 14px;font:inherit;cursor:pointer}
-button.g{background:transparent;color:var(--tx);border:1px solid var(--bd)}
-button.r{background:var(--er)}
-input{background:var(--bg);color:var(--tx);border:1px solid var(--bd);border-radius:10px;padding:9px;font:inherit;width:100%;margin:4px 0}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}
-.nav{display:flex;gap:6px;overflow-x:auto}.nav button{flex:none}
-.mu{color:var(--mu);font-size:13px}.ok{color:var(--ok)}.er{color:var(--er)}
-.big{font-size:44px;font-weight:700;text-align:center;margin:14px 0}
-.it{display:flex;gap:6px;align-items:center}.it input{margin:2px 0}
-.sm{flex:none;width:70px}
-</style></head><body><div class="w" id="app"></div>
+:root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --bg: #0b0d14;
+  --card: rgba(22, 26, 38, 0.75);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --tx: #f0f2f8;
+  --mu: #80879a;
+  --ac: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+  --ac-hover: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%);
+  --ok: #22c55e;
+  --er: #ef4444;
+  --bd: rgba(255, 255, 255, 0.1);
+  --gold: #f59e0b;
+  --gold-glow: rgba(245, 158, 11, 0.25);
+  --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+* { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(124, 58, 237, 0.15) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(245, 158, 11, 0.08) 0%, transparent 45%);
+  background-attachment: fixed;
+  color: var(--tx);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.w {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px 12px 32px 12px;
+}
+
+/* Glassmorphism Cards */
+.card {
+  background: var(--card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  padding: 16px;
+  margin: 12px 0;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+/* Headings & Text */
+h2, h3 { margin: 0 0 8px 0; font-weight: 700; color: #fff; }
+h2 { font-size: 22px; }
+h3 { font-size: 17px; }
+
+/* Buttons */
+button {
+  background: var(--ac);
+  color: #fff;
+  border: 0;
+  border-radius: 12px;
+  padding: 11px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px 0 rgba(124, 58, 237, 0.39);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+button:hover { transform: translateY(-1px); opacity: 0.95; }
+button:active { transform: translateY(1px); }
+
+button.g {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--tx);
+  border: 1px solid var(--bd);
+  box-shadow: none;
+}
+button.g:hover { background: rgba(255, 255, 255, 0.1); }
+
+button.r {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.39);
+}
+
+/* Inputs */
+input {
+  background: rgba(15, 17, 23, 0.6);
+  color: var(--tx);
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-size: 14px;
+  width: 100%;
+  margin: 6px 0;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+input:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2); }
+
+/* Layout Grid & Helpers */
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row > * { flex: 1; }
+
+.nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+  scrollbar-width: none;
+}
+.nav::-webkit-scrollbar { display: none; }
+
+.nav button {
+  flex: 1;
+  white-space: nowrap;
+  padding: 10px 14px;
+  font-size: 13px;
+  border-radius: 14px;
+}
+
+.mu { color: var(--mu); font-size: 13px; }
+.ok { color: var(--ok); font-weight: 600; }
+.er { color: var(--er); font-weight: 600; }
+
+.big {
+  font-size: 48px;
+  font-weight: 800;
+  text-align: center;
+  margin: 20px 0;
+  letter-spacing: -1px;
+  background: linear-gradient(180deg, #fff 0%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.big.er {
+  background: linear-gradient(180deg, #fca5a5 0%, #ef4444 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.big.ok {
+  background: linear-gradient(180deg, #86efac 0%, #22c55e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.it { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.it input { margin: 0; }
+.sm { flex: none; width: 75px; }
+
+/* Custom Badge Balance */
+.bal-badge {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 0 12px var(--gold-glow);
+}
+
+/* Case Item Grid */
+.case-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(26, 31, 46, 0.8) 0%, rgba(18, 21, 31, 0.8) 100%);
+}
+.case-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.items-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.item-tag {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--mu);
+}
+
+/* Rocket Display Sandbox */
+.rocket-arena {
+  height: 140px;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at bottom, #1b1035 0%, #0d0e17 100%);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.rocket-icon {
+  font-size: 32px;
+  transition: transform 0.2s ease;
+  filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.8));
+}
+.rocket-flying .rocket-icon {
+  animation: floatRocket 0.6s infinite alternate ease-in-out;
+}
+@keyframes floatRocket {
+  0% { transform: translateY(0px) rotate(-5deg); }
+  100% { transform: translateY(-8px) rotate(5deg); }
+}
+
+/* Modal Result Window */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+.modal-win {
+  background: var(--card);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.3);
+  border-radius: 20px;
+  padding: 24px;
+  text-align: center;
+  max-width: 320px;
+  width: 90%;
+  animation: popUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popUp { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="w" id="app"></div>
+
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S=null,tk=null,tab='cases',msg='',A=null,EC=[],rt=null,rp=null,lg=null,pl=null;
+let S=null,tk=null,tab='cases',msg='',A=null,EC=[],rt=null,rp=null,lg=null,pl=null,winModal=null;
+
 try{tk=localStorage.getItem('tk')}catch(e){}
+
 async function api(p,b){
  const r=await fetch('/api/'+p,{method:b===undefined?'GET':'POST',headers:{'content-type':'application/json',...(tk?{authorization:'Bearer '+tk}:{})},body:b===undefined?undefined:JSON.stringify(b)});
  const d=await r.json().catch(()=>({error:'Ошибка сети'}));
  if(!r.ok){if(r.status==401){tk=null;S=null}throw new Error(d.error||'Ошибка')}
  return d}
+
 const er=e=>'<span class="er">'+esc(e.message)+'</span>';
+
 async function load(){try{S=await api('state')}catch(e){S=null}render()}
 async function loadAdmin(){try{A=await api('admin/data');EC=JSON.parse(JSON.stringify(S.cases))}catch(e){A=null}render()}
 async function act(p,b,ok){try{const d=await api(p,b);msg=ok?ok(d):''}catch(e){msg=er(e)}await load();if(S&&S.adm&&tab=='adm')await loadAdmin()}
+
 const sm=c=>c.items.reduce((a,b)=>a+b.w,0)||1;
 const pc=(c,i)=>+(i.w/sm(c)*100).toFixed(2);
+
 function go(t){tab=t;msg='';if(t=='adm'&&S.adm)loadAdmin();else{render();if(t=='rock')rkInit()}}
+
+function closeWinModal(){ winModal=null; render(); }
+
 function render(){
  const a=$('app');
  if(!S){a.innerHTML=loginView();return}
  const T=(k,n)=>`<button class="${tab==k?'':'g'}" onclick="go('${k}')">${n}</button>`;
- a.innerHTML=`<div class="card row"><b>@${esc(S.user)}</b><b id="bal">⭐ ${S.bal}</b><button class="g" onclick="logout()">Выйти</button></div>
+ 
+ let modalHtml = '';
+ if(winModal){
+   modalHtml = `<div class="modal-overlay" onclick="closeWinModal()"><div class="modal-win" onclick="event.stopPropagation()">
+     <div style="font-size: 48px; margin-bottom: 8px;">🎁</div>
+     <h2>Поздравляем!</h2>
+     <p class="mu">Вам выпал предмет:</p>
+     <div style="font-size: 18px; font-weight: 700; color: #fff; margin: 12px 0;">${esc(winModal.name)}</div>
+     <div class="bal-badge" style="margin-bottom: 16px;">⭐ ${winModal.value}</div>
+     <br>
+     <button style="width: 100%" onclick="closeWinModal()">Забрать в инвентарь</button>
+   </div></div>`;
+ }
+
+ a.innerHTML=`
+ <div class="card row" style="justify-content: space-between;">
+   <div>
+     <div class="mu" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Игрок</div>
+     <b>@${esc(S.user)}</b>
+   </div>
+   <div class="bal-badge" id="bal">⭐ ${S.bal}</div>
+   <button class="g" style="flex:none; padding: 8px 12px;" onclick="logout()">Выйти</button>
+ </div>
  <div class="nav">${T('cases','Кейсы')}${T('rock','Rockets')}${T('inv','Инвентарь')}${T('dep','Баланс')}${S.canAdm?T('adm','Админ'):''}</div>
- <div class="mu" id="m">${msg}</div>`+({cases:casesView,rock:rockView,inv:invView,dep:depView,adm:admView}[tab])();
+ <div class="mu" id="m" style="margin: 8px 0; text-align: center;">${msg}</div>
+ `+({cases:casesView,rock:rockView,inv:invView,dep:depView,adm:admView}[tab])() + modalHtml;
 }
-function loginView(){return lg?`<div class="card"><h3>Код из бота</h3><p class="mu">Бот отправил код пользователю @${esc(lg.u)}. Если не пришёл, откройте бота @${esc(lg.bot)} и нажмите Start.</p><input id="cd" placeholder="Код" inputmode="numeric"><button onclick="verify()">Войти</button> <button class="g" onclick="lg=null;msg='';render()">Назад</button><div>${msg}</div></div>`:`<div class="card"><h2>⭐ Unix Stars</h2><p class="mu">Вход по юзернейму из Unixgram.</p><input id="un" placeholder="@username"><button onclick="login()">Войти</button><div>${msg}</div></div>`}
+
+function loginView(){
+  return lg?`<div class="card" style="text-align: center;">
+    <h2>Код подтверждения</h2>
+    <p class="mu">Бот отправил код пользователю <b>@${esc(lg.u)}</b>.<br>Если не пришёл, откройте бота <b>@${esc(lg.bot)}</b> и нажмите Start.</p>
+    <input id="cd" placeholder="Код из бота" inputmode="numeric" style="text-align: center; font-size: 18px; letter-spacing: 2px;">
+    <button style="width: 100%; margin-top: 8px;" onclick="verify()">Подтвердить вход</button>
+    <button class="g" style="width: 100%; margin-top: 6px;" onclick="lg=null;msg='';render()">Назад</button>
+    <div style="margin-top: 8px;">${msg}</div>
+  </div>`
+  :`<div class="card" style="text-align: center; padding: 28px 18px;">
+    <div style="font-size: 42px; margin-bottom: 8px;">⭐</div>
+    <h2>Unix Stars</h2>
+    <p class="mu" style="margin-bottom: 16px;">Быстрый вход по юзернейму из Unixgram</p>
+    <input id="un" placeholder="@username" style="text-align: center;">
+    <button style="width: 100%; margin-top: 10px;" onclick="login()">Войти в аккаунт</button>
+    <div style="margin-top: 8px;">${msg}</div>
+  </div>`
+}
+
 async function login(){try{const u=$('un').value,d=await api('login',{username:u});if(d.token){tk=d.token;try{localStorage.setItem('tk',tk)}catch(e){}msg='';await load();return}lg={u:u.replace(/^@/,''),bot:d.bot};msg=''}catch(e){msg=er(e)}render()}
 async function verify(){try{const d=await api('login/verify',{username:lg.u,code:$('cd').value});tk=d.token;try{localStorage.setItem('tk',tk)}catch(e){}lg=null;msg='';await load()}catch(e){msg=er(e);render()}}
 async function logout(){try{await api('logout',{})}catch(e){}tk=null;S=null;A=null;try{localStorage.removeItem('tk')}catch(e){}render()}
+
 // Кейсы
-function casesView(){return S.cases.map(c=>`<div class="card"><div class="row"><b>${esc(c.name)}</b><span>⭐ ${c.price}</span><button onclick="openCase(${c.id})">Открыть</button></div><div class="mu">${c.items.map(i=>esc(i.name)+' '+pc(c,i)+'%').join(' · ')}</div></div>`).join('')}
-function openCase(id){act('case/open',{id},d=>d.item.value>0?`<b class="ok">Выпало: ${esc(d.item.name)} (${d.item.value} ⭐) — в инвентаре</b>`:'Выпало: пусто')}
+function casesView(){
+  return S.cases.map(c=>`
+    <div class="card case-card">
+      <div class="row" style="margin-bottom: 8px;">
+        <div>
+          <b style="font-size: 16px;">${esc(c.name)}</b>
+          <div class="mu">Стоимость: <span style="color:#fbbf24; font-weight:600;">⭐ ${c.price}</span></div>
+        </div>
+        <button style="flex:none;" onclick="openCase(${c.id})">Открыть кейс</button>
+      </div>
+      <div class="items-grid">
+        ${c.items.map(i=>`<div class="item-tag">${esc(i.name)} <b style="color:#a5b4fc;">${pc(c,i)}%</b></div>`).join('')}
+      </div>
+    </div>
+  `).join('')
+}
+
+async function openCase(id){
+  try {
+    const d = await api('case/open',{id});
+    if(d.item && d.item.value > 0){
+      winModal = d.item;
+    } else {
+      msg = 'Выпало: пусто';
+    }
+  } catch(e) {
+    msg = er(e);
+  }
+  await load();
+}
+
 // Инвентарь
-function invView(){return (S.inv.length?S.inv.map(i=>`<div class="card row"><b>${esc(i.name)}</b><span>${i.value} ⭐</span><button onclick="sell(${i.id})">Продать ${Math.floor(i.value*(100-S.cfg.sell_fee)/100)}</button><button class="g" onclick="act('inv/withdraw',{id:${i.id}},()=>'Заявка на вывод предмета отправлена')">Вывести</button></div>`).join(''):'<div class="card mu">Инвентарь пуст</div>')+`<div class="mu">Комиссия продажи: ${S.cfg.sell_fee}%</div>`+myReqs()}
+function invView(){
+  return (S.inv.length?S.inv.map(i=>`
+    <div class="card row">
+      <div>
+        <b>${esc(i.name)}</b>
+        <div class="mu">Ценность: ⭐ ${i.value}</div>
+      </div>
+      <button onclick="sell(${i.id})">Продать за ⭐ ${Math.floor(i.value*(100-S.cfg.sell_fee)/100)}</button>
+      <button class="g" style="flex:none;" onclick="act('inv/withdraw',{id:${i.id}},()=>'Заявка на вывод предмета отправлена')">Вывести</button>
+    </div>
+  `).join(''):'<div class="card mu" style="text-align: center; padding: 24px;">Ваш инвентарь пока пуст</div>')
+  +`<div class="mu" style="text-align: center; margin-bottom: 12px;">Комиссия продажи предметов: ${S.cfg.sell_fee}%</div>`+myReqs()
+}
+
 function sell(id){act('inv/sell',{id},d=>`Продано за ${d.get} ⭐`)}
+
 // Баланс
-function depCard(){return S.cfg.botOn?`<div class="card"><h3>Пополнение</h3><p class="mu">Укажите сумму: бот @${esc(S.cfg.bot)} пришлёт вам счёт в Unixgram. Оплатите его, и баланс пополнится автоматически.</p><input id="da" type="number" placeholder="Сумма ⭐"><button onclick="dep()">Получить счёт</button><div class="mu">Комиссия пополнения: ${S.cfg.dep_fee}%</div></div>`:`<div class="card"><h3>Пополнение</h3><p class="mu">1. Отправьте звёзды в Unixgram на аккаунт <b>@${esc(S.cfg.recv)}</b>.<br>2. Укажите свой юзернейм из Unixgram и сумму. Админ проверит перевод и подтвердит заявку.</p><input id="du" placeholder="Ваш @username в Unixgram"><input id="da" type="number" placeholder="Сумма ⭐"><button onclick="dep()">Отправить заявку</button><div class="mu">Комиссия пополнения: ${S.cfg.dep_fee}%</div></div>`}
-function depView(){return depCard()+`
-<div class="card"><h3>Вывод звёзд</h3><input id="wa" type="number" placeholder="Сумма ⭐"><button onclick="act('withdraw',{amount:$('wa').value},()=>'Заявка на вывод отправлена')">Подать заявку</button></div>${myReqs()}`}
+function depCard(){
+  return S.cfg.botOn?`
+    <div class="card">
+      <h3>Пополнение баланса</h3>
+      <p class="mu">Укажите сумму: бот @${esc(S.cfg.bot)} пришлёт вам счёт в Unixgram. Оплатите его, и баланс пополнится автоматически.</p>
+      <input id="da" type="number" placeholder="Сумма в ⭐">
+      <button style="width:100%; margin-top:8px;" onclick="dep()">Получить счёт</button>
+      <div class="mu" style="margin-top:6px;">Комиссия пополнения: ${S.cfg.dep_fee}%</div>
+    </div>`
+  :`<div class="card">
+      <h3>Пополнение баланса</h3>
+      <p class="mu">1. Отправьте звёзды в Unixgram на аккаунт <b>@${esc(S.cfg.recv)}</b>.<br>2. Укажите свой юзернейм и сумму перевода ниже.</p>
+      <input id="du" placeholder="Ваш @username в Unixgram">
+      <input id="da" type="number" placeholder="Сумма ⭐">
+      <button style="width:100%; margin-top:8px;" onclick="dep()">Отправить заявку</button>
+      <div class="mu" style="margin-top:6px;">Комиссия пополнения: ${S.cfg.dep_fee}%</div>
+    </div>`
+}
+
+function depView(){
+  return depCard()+`
+  <div class="card">
+    <h3>Вывод звёзд</h3>
+    <input id="wa" type="number" placeholder="Сумма ⭐">
+    <button style="width:100%; margin-top:8px;" onclick="act('withdraw',{amount:$('wa').value},()=>'Заявка на вывод отправлена')">Подать заявку</button>
+  </div>${myReqs()}`
+}
+
 async function dep(){try{await api('deposit',{amount:Math.floor(+$('da').value),from:$('du')?$('du').value:''});if(S.cfg.botOn){msg='Счёт отправлен в чат с ботом @'+esc(S.cfg.bot)+'. Оплатите его, баланс обновится сам.';render();pollBal()}else{msg='Заявка на пополнение отправлена, ждите подтверждения';await load()}}catch(e){msg=er(e);render()}}
+
 function pollBal(){clearInterval(pl);let n=0;const b0=S.bal;pl=setInterval(async()=>{try{S=await api('state');updBal();if(S.bal>b0){clearInterval(pl);msg='<b class="ok">Баланс пополнен</b>';render()}}catch(e){}if(++n>36)clearInterval(pl)},5000)}
+
 const stl={new:'⏳ ожидает',done:'✅ выполнено',no:'❌ отклонено'};
 const rd=r=>r.type=='stars'?`Вывод звёзд: ${r.amount} ⭐`:r.type=='dep'?`Пополнение: @${esc(r.from_user)} перевёл ${r.amount} ⭐ → зачислить ${Math.floor(r.amount*(100-S.cfg.dep_fee)/100)} ⭐`:`Вывод предмета: ${esc(r.item_name)} (${r.item_value} ⭐)`;
-function myReqs(){return S.reqs.length?`<div class="card"><b>Мои заявки</b>${S.reqs.map(r=>`<div class="mu">${rd(r)} — ${stl[r.status]}</div>`).join('')}</div>`:''}
-// Rockets (всё считает сервер, клиент только рисует)
-function rockView(){return `<div class="card"><div class="big" id="mx">1.00x</div><input id="bt" type="number" min="1" placeholder="Ставка ⭐" value="10"><div class="row"><button onclick="rkStart()">Старт</button><button class="r" onclick="rkOut()">Забрать</button></div><div class="mu" id="rs"></div></div>`}
+
+function myReqs(){return S.reqs.length?`<div class="card"><b>Мои заявки</b>${S.reqs.map(r=>`<div class="mu" style="margin-top:4px;">${rd(r)} —${stl[r.status]}</div>`).join('')}</div>`:''}
+
+// Rockets
+function rockView(){
+  return `
+  <div class="card" style="text-align: center;">
+    <div class="rocket-arena" id="arena">
+      <div class="rocket-icon" id="rkIcon">🚀</div>
+      <div class="big" id="mx" style="margin: 0;">1.00x</div>
+    </div>
+    <div class="row">
+      <input id="bt" type="number" min="1" placeholder="Ставка ⭐" value="10" style="margin:0;">
+      <button onclick="rkStart()">Старт</button>
+      <button class="r" onclick="rkOut()">Забрать</button>
+    </div>
+    <div class="mu" id="rs" style="margin-top:10px; font-weight:600;"></div>
+  </div>`
+}
+
 function updBal(){const e=$('bal');if(e)e.textContent='⭐ '+S.bal}
-function rkStop(){clearInterval(rt);clearInterval(rp);rt=rp=null}
-function rkRun(m0){rkStop();const t=Date.now();
- rt=setInterval(()=>{const e=$('mx');if(!e){rkStop();return}e.className='big';e.textContent=(m0*Math.exp(0.00012*(Date.now()-t))).toFixed(2)+'x'},50);
- rp=setInterval(async()=>{try{const d=await api('rocket/status');if(!$('mx')){rkStop();return}if(d.crashed)rkCrash(d.crash);else if(d.none)rkStop()}catch(e){}},500)}
-function rkCrash(c){rkStop();const e=$('mx');if(e){e.className='big er';e.textContent=c.toFixed(2)+'x 💥'}const r=$('rs');if(r)r.textContent='Ракета взорвалась, ставка потеряна'}
+function rkStop(){clearInterval(rt);clearInterval(rp);rt=rp=null; const a=$('arena'); if(a)a.className='rocket-arena';}
+
+function rkRun(m0){
+  rkStop();
+  const t=Date.now();
+  const a=$('arena'); if(a) a.className='rocket-arena rocket-flying';
+  const ic=$('rkIcon'); if(ic) ic.textContent='🚀';
+
+  rt=setInterval(()=>{
+    const e=$('mx');if(!e){rkStop();return}
+    e.className='big';
+    e.textContent=(m0*Math.exp(0.00012*(Date.now()-t))).toFixed(2)+'x';
+  },50);
+
+  rp=setInterval(async()=>{
+    try{
+      const d=await api('rocket/status');
+      if(!$('mx')){rkStop();return}
+      if(d.crashed)rkCrash(d.crash);
+      else if(d.none)rkStop()
+    }catch(e){}
+  },500);
+}
+
+function rkCrash(c){
+  rkStop();
+  const e=$('mx');if(e){e.className='big er';e.textContent=c.toFixed(2)+'x 💥'}
+  const ic=$('rkIcon'); if(ic) ic.textContent='💥';
+  const r=$('rs');if(r)r.textContent='Ракета взорвалась, ставка потеряна';
+}
+
 async function rkInit(){try{const d=await api('rocket/status');if(d.run)rkRun(d.m)}catch(e){}}
 async function rkStart(){try{const bet=Math.floor(+$('bt').value);const d=await api('rocket/start',{bet});S.bal-=d.bet;updBal();$('rs').textContent='';rkRun(1)}catch(e){$('rs').innerHTML=er(e)}}
 async function rkOut(){try{const d=await api('rocket/cashout',{});if(d.crashed){rkCrash(d.crash);return}rkStop();S.bal+=d.win;updBal();const e=$('mx');e.className='big ok';e.textContent=d.m.toFixed(2)+'x';$('rs').textContent='Выигрыш: '+d.win+' ⭐'}catch(e){$('rs').innerHTML=er(e)}}
+
 // Админка
 function setPct(ci,ii,v){const it=EC[ci].items,s=sm(EC[ci]),P=it.map(x=>x.w/s*100);v=it.length==1?100:Math.min(100,Math.max(0,v||0));const so=P.reduce((a,b,k)=>k==ii?a:a+b,0);
  it.forEach((x,k)=>{x.w=k==ii?v:+(so>0?P[k]*(100-v)/so:(100-v)/(it.length-1)).toFixed(2)});render()}
@@ -85,21 +498,16 @@ function delItem(ci,ii){const it=EC[ci].items;it.splice(ii,1);if(it.length){cons
 function saveCase(ci){const c=EC[ci];act('admin/case',{id:c.id,name:c.name,price:c.price,items:c.items},()=>'Кейс сохранён')}
 function delCase(ci){if(EC[ci].id)act('admin/case/delete',{id:EC[ci].id},()=>'Кейс удалён');else{EC.splice(ci,1);render()}}
 function saveCfg(){act('admin/settings',{dep_fee:$('f1').value,sell_fee:$('f2').value,rtp:$('f3').value,bot:$('f4').value,recv:$('f5').value},()=>'Настройки сохранены')}
+
 function admView(){
- if(!S.adm)return `<div class="card"><input id="ap" type="password" placeholder="Пароль админки"><button onclick="admLogin()">Войти</button></div>`;
- if(!A)return '<div class="mu">Загрузка…</div>';
- let h=EC.map((c,ci)=>`<div class="card"><div class="it"><input value="${esc(c.name)}" onchange="EC[${ci}].name=this.value"><input class="sm" type="number" value="${c.price}" onchange="EC[${ci}].price=+this.value"></div>
- <div class="mu">Название · приз ⭐ · шанс % (остальные подстраиваются, сумма 100%)</div>
- ${c.items.map((i,ii)=>`<div class="it"><input value="${esc(i.name)}" onchange="EC[${ci}].items[${ii}].name=this.value"><input class="sm" type="number" value="${i.value}" onchange="EC[${ci}].items[${ii}].value=+this.value"><input class="sm" type="number" step="0.01" value="${pc(c,i)}" onchange="setPct(${ci},${ii},+this.value)"><button class="g sm" onclick="delItem(${ci},${ii})">✕</button></div>`).join('')}
- <div class="row"><button class="g" onclick="addItem(${ci})">+ приз</button><button onclick="saveCase(${ci})">Сохранить</button><button class="r" onclick="delCase(${ci})">Удалить</button></div></div>`).join('');
- h+=`<button onclick="EC.push({id:0,name:'Новый кейс',price:10,items:[{name:'Приз',value:10,w:100}]});render()">+ Новый кейс</button>`;
- const c=A.cfg;
- h+=`<div class="card"><b>Настройки</b><div class="mu">Комиссия пополнения %</div><input id="f1" type="number" value="${c.dep_fee}"><div class="mu">Комиссия продажи % (идёт на баланс @gold)</div><input id="f2" type="number" value="${c.sell_fee}"><div class="mu">Rockets: возврат игрокам % (RTP, 50–100)</div><input id="f3" type="number" value="${c.rtp}"><div class="mu">Юз бота</div><input id="f4" value="${esc(c.bot)}"><div class="mu">Аккаунт для пополнения (режим без бота)</div><input id="f5" value="${esc(c.recv)}"><button onclick="saveCfg()">Сохранить</button></div>`;
- h+=`<div class="card"><b>Заявки (${A.reqs.length})</b>${A.reqs.map(r=>`<div class="it"><span style="flex:1">@${esc(r.user)}: ${rd2(r)}</span><button class="sm" onclick="reqAct(${r.id},1)">✓</button><button class="r sm" onclick="reqAct(${r.id},0)">✕</button></div>`).join('')||'<div class="mu">Нет новых</div>'}</div>`;
- if(S.owner)h+=`<div class="card"><b>Токен бота Unixgram</b><input id="bt2" type="password" placeholder="Токен бота"><button onclick="act('admin/bot',{token:$('bt2').value},()=>'Бот подключён, вебхук установлен')">Подключить</button></div><div class="card"><b>Админы (только владелец)</b>${A.admins.map(n=>`<div class="it"><span style="flex:1">@${esc(n)}</span><button class="r sm" onclick="act('admin/admins',{name:'${esc(n)}',remove:1})">✕</button></div>`).join('')}<div class="it"><input id="na" placeholder="@username"><button class="sm" onclick="act('admin/admins',{name:$('na').value})">+</button></div><input id="np" type="password" placeholder="Новый пароль (от 8 символов)"><button class="g" onclick="act('admin/password',{password:$('np').value},()=>'Пароль изменён')">Сменить пароль</button></div>`;
- return h}
-const rd2=r=>rd({...r});
-function reqAct(id,ok){act('admin/req',{id,ok},()=>ok?'Заявка подтверждена':'Заявка отклонена')}
-async function admLogin(){try{await api('admin/login',{password:$('ap').value});msg='';await load();await loadAdmin()}catch(e){msg=er(e);render()}}
-if(tk)load();else render();
-</script></body></html>
+ if(!S.adm)return `<div class="card"><h3>Вход в админ-панель</h3><input id="ap" type="password" placeholder="Пароль админки"><button style="width:100%; margin-top:8px;" onclick="admLogin()">Войти</button></div>`;
+ if(!A)return '<div class="card mu" style="text-align:center;">Загрузка данных…</div>';
+ 
+ let h=EC.map((c,ci)=>`<div class="card">
+   <div class="it"><input value="${esc(c.name)}" onchange="EC[${ci}].name=this.value"><input class="sm" type="number" value="${c.price}" onchange="EC[${ci}].price=+this.value"></div>
+   <div class="mu">Название · цена ⭐ · шанс % (сумма 100%)</div>
+   ${c.items.map((i,ii)=>`<div class="it"><input value="${esc(i.name)}" onchange="EC[${ci}].items[${ii}].name=this.value"><input class="sm" type="number" value="${i.value}" onchange="EC[${ci}].items[${ii}].value=+this.value"><input class="sm" type="number" step="0.01" value="${pc(c,i)}" onchange="setPct(${ci},${ii},+this.value)"><button class="g sm" onclick="delItem(${ci},${ii})">✕</button></div>`).join('')}
+   <div class="row" style="margin-top:8px;"><button class="g" onclick="addItem(${ci})">+ приз</button><button onclick="saveCase(${ci})">Сохранить</button><button class="r" onclick="delCase(${ci})">Удалить</button></div>
+ </div>`).join('');
+ 
+ h+=`<button style="width:100%; margin-bottom:12px;" onclick="EC.push({id:0,name:'Новый кейс',price:10,items:[{name:'Приз',value:10,w:100}]});render
