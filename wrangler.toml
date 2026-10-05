@@ -1,5 +1,5 @@
 name = "unix-stars"
-main = "src/worker-3.js"
+main = "src/worker.js"
 compatibility_date = "2025-06-01"
 
 [assets]
