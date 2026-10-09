@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unix Stars</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#0b0d17;--bg2:#141830;--card:rgba(255,255,255,.06);--tx:#eef0ff;--mu:#8e94b8;--ac:#ff3d9a;--ac2:#7c5cff;--ok:#34d399;--er:#f43f5e;--bd:rgba(255,255,255,.1);--gold:#fbbf24}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#eef0fb;--bg2:#fff;--card:rgba(255,255,255,.85);--tx:#171a2e;--mu:#667090;--bd:rgba(20,24,60,.12)}}
+:root[data-theme="dark"]{--bg:#0b0d17;--bg2:#141830;--card:rgba(255,255,255,.06);--tx:#eef0ff;--mu:#8e94b8;--bd:rgba(255,255,255,.1)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--tx);font:15px/1.4 system-ui,sans-serif;background:radial-gradient(900px 500px at 0% -10%,rgba(255,61,154,.2),transparent),radial-gradient(700px 400px at 100% 0,rgba(124,92,255,.22),transparent),var(--bg);background-attachment:fixed}
+.w{max-width:640px;margin:0 auto;padding:12px 12px 96px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px;margin:10px 0;backdrop-filter:blur(10px)}
+button{background:linear-gradient(135deg,var(--ac),var(--ac2));color:#fff;border:0;border-radius:12px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;transition:transform .12s,filter .2s}
+button:active{transform:scale(.95)}button:hover{filter:brightness(1.1)}
+button.g{background:transparent;color:var(--tx);border:1px solid var(--bd);font-weight:500}
+button.r{background:linear-gradient(135deg,#f43f5e,#fb923c)}
+input{background:rgba(127,127,160,.12);color:var(--tx);border:1px solid var(--bd);border-radius:12px;padding:10px;font:inherit;width:100%;margin:4px 0;outline:none}
+input:focus{border-color:var(--ac)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}
+.nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}.nav button{flex:none}
+.mu{color:var(--mu);font-size:13px}.ok{color:var(--ok)}.er{color:var(--er)}
+.view{animation:fade .3s}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.top{display:flex;gap:8px;align-items:center}.top b{flex:1}
+.chip{background:var(--card);border:1px solid var(--bd);border-radius:99px;padding:6px 12px;font-weight:700;color:var(--gold)}
+.it{display:flex;gap:6px;align-items:center}.it input{margin:2px 0}
+.sm{flex:none;width:70px}
+.case{display:flex;gap:12px;align-items:center}
+.bx{font-size:42px;animation:fl 3s ease-in-out infinite}
+@keyframes fl{50%{transform:translateY(-5px) rotate(-4deg)}}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.tag{font-size:12px;border:1px solid var(--tc);color:var(--tc);border-radius:99px;padding:2px 8px}
+.t0{--tc:#8e94b8}.t1{--tc:#60a5fa}.t2{--tc:#a78bfa}.t3{--tc:#fbbf24}
+.ov{position:fixed;inset:0;z-index:9;background:rgba(5,6,15,.94);display:flex;flex-direction:column;justify-content:center;gap:16px;padding:16px;animation:fade .25s}
+.rl{position:relative;overflow:hidden;border-radius:16px;border:1px solid var(--bd);background:#141830;height:132px}
+.rl:before,.rl:after{content:"";position:absolute;top:0;bottom:0;width:60px;z-index:2;pointer-events:none}
+.rl:before{left:0;background:linear-gradient(90deg,#141830,transparent)}.rl:after{right:0;background:linear-gradient(270deg,#141830,transparent)}
+.mk{position:absolute;left:50%;top:0;bottom:0;width:3px;margin-left:-1.5px;background:var(--gold);z-index:3;box-shadow:0 0 12px var(--gold)}
+.tr{display:flex;gap:8px;padding:8px 0;will-change:transform}
+.cell{flex:none;width:96px;height:116px;border-radius:12px;border:2px solid var(--tc);color:#eef0ff;background:linear-gradient(180deg,rgba(255,255,255,.07),transparent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;font-size:12px}
+.cell .ic{font-size:30px}
+.res{text-align:center;color:#eef0ff;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+.res h2{margin:4px 0;color:var(--tc);text-shadow:0 0 18px var(--tc)}
+@keyframes pop{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
+.sky{position:relative;height:260px;border-radius:18px;overflow:hidden;border:1px solid var(--bd);background:linear-gradient(180deg,#050816,#1b2a6b);color:#fff}
+.stars{position:absolute;inset:0;opacity:.85;background-size:320px 240px;background-image:radial-gradient(2px 2px at 20px 30px,#fff,transparent),radial-gradient(1.5px 1.5px at 90px 120px,#fff,transparent),radial-gradient(2px 2px at 160px 70px,#bcd,transparent),radial-gradient(1.5px 1.5px at 230px 190px,#fff,transparent),radial-gradient(2px 2px at 300px 100px,#fff,transparent)}
+.fly .stars{animation:st .6s linear infinite}
+@keyframes st{to{background-position:0 240px}}
+.rk{position:absolute;left:14px;bottom:12px;font-size:46px;transition:transform .06s linear;filter:drop-shadow(0 6px 10px rgba(255,140,0,.6))}
+.fly .rk{animation:wob .25s ease-in-out infinite alternate}
+@keyframes wob{to{margin:-2px 0 0 2px}}
+.mx{position:absolute;top:18px;left:0;right:0;text-align:center;font-size:48px;font-weight:800;text-shadow:0 0 20px rgba(124,92,255,.8)}
+.mx.mid{color:var(--ac2)}.mx.hi{color:var(--gold);text-shadow:0 0 24px var(--gold)}
+.boom{animation:shake .4s}.boom .rk{animation:bm .7s ease-out forwards}.boom .mx{color:var(--er)}
+@keyframes bm{from{scale:.4}60%{scale:2.4}to{scale:1.8}}
+@keyframes shake{20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+.win{box-shadow:0 0 0 2px var(--ok),0 0 30px rgba(52,211,153,.5)}.win .mx{color:var(--ok)}
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:space-around;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));background:rgba(10,10,22,.9);backdrop-filter:blur(14px);border-top:1px solid var(--bd)}
+.bar button{background:none;color:var(--mu);flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:500;padding:4px}
+.bar button b{font-size:21px;font-weight:400}
+.bar button.on{color:#fff}.bar button.on b{filter:drop-shadow(0 0 8px var(--ac))}
+.tile{display:flex;gap:14px;align-items:center;padding:18px;border-radius:20px;margin:12px 0;background:var(--g);color:#fff;cursor:pointer;box-shadow:0 8px 30px rgba(0,0,0,.35);transition:transform .15s}
+.tile:active{transform:scale(.98)}.tile.off{opacity:.45;filter:grayscale(.6);cursor:default}.te{font-size:44px}.mu2{opacity:.85;font-size:13px}
+.mgrid{display:grid;gap:6px;margin:10px 0}
+.mc{aspect-ratio:1;padding:0;font-size:24px;background:rgba(127,127,160,.18);border:1px solid var(--bd);color:var(--tx);border-radius:12px}
+.mc:disabled{cursor:default;filter:none}
+.mc.ok{background:linear-gradient(135deg,#10b981,#0ea5e9);animation:pop .3s}
+.mc.hit{background:linear-gradient(135deg,#f43f5e,#fb923c);animation:pop .4s}
+.mc.dim{opacity:.55}
+.mgh{display:flex;justify-content:space-between;align-items:center}
+</style></head><body><div class="w" id="app"></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let S=null,tk=null,tab='home',msg='',A=null,EC=[],rt=null,rp=null,lg=null,pl=null;
+try{tk=localStorage.getItem('tk')}catch(e){}
+async function api(p,b){
+ const r=await fetch('/api/'+p,{method:b===undefined?'GET':'POST',headers:{'content-type':'application/json',...(tk?{authorization:'Bearer '+tk}:{})},body:b===undefined?undefined:JSON.stringify(b)});
+ const d=await r.json().catch(()=>({error:'Ошибка сети'}));
+ if(!r.ok){if(r.status==401){tk=null;S=null}throw new Error(d.error||'Ошибка')}
+ return d}
+const er=e=>'<span class="er">'+esc(e.message)+'</span>';
+async function load(){try{S=await api('state')}catch(e){S=null}render()}
+async function loadAdmin(){try{A=await api('admin/data');EC=JSON.parse(JSON.stringify(S.cases))}catch(e){A=null}render()}
+async function act(p,b,ok){try{const d=await api(p,b);msg=ok?ok(d):''}catch(e){msg=er(e)}await load();if(S&&S.adm&&tab=='adm')await loadAdmin()}
+const sm=c=>c.items.reduce((a,b)=>a+b.w,0)||1;
+const pc=(c,i)=>+(i.w/sm(c)*100).toFixed(2);
+function go(t){tab=t;msg='';if(t=='adm'&&S.adm)loadAdmin();else{render();if(t=='rock')rkInit();if(t=='mines')mgInit()}}
+function render(){
+ const a=$('app');
+ if(!S){a.innerHTML=loginView();return}
+ if(S.needPw){a.innerHTML=pwView();return}
+ const G=['cases','rock','mines'],B=(k,e,n)=>`<button class="${tab==k||(k=='home'&&G.includes(tab))?'on':''}" onclick="go('${k}')"><b>${e}</b>${n}</button>`;
+ a.innerHTML=`<div class="card top"><b>@${esc(S.user)}</b><span class="chip" id="bal">⭐ ${S.bal}</span><button class="g" onclick="logout()">Выйти</button></div>
+ <div class="mu" id="m">${msg}</div><div class="view">`+(G.includes(tab)?`<button class="g" onclick="go('home')" style="margin-bottom:10px">← Игры</button>`:'')+({home:homeView,cases:casesView,rock:rockView,mines:minesView,inv:invView,dep:depView,adm:admView}[tab])()+`</div><nav class="bar">${B('home','🏠','Игры')}${B('inv','🎒','Инвентарь')}${B('dep','💰','Баланс')}${S.canAdm?B('adm','⚙️','Админ'):''}</nav>`;
+}
+function loginView(){
+ const m=`<div>${msg}</div>`,bk=`<button class="g" onclick="lg=null;msg='';render()">Назад</button>`;
+ if(!lg)return `<div class="card"><div class="bx" style="font-size:54px;text-align:center">🚀</div><h2 style="text-align:center">Unix Stars</h2><p class="mu">Введите юзернейм из Unixgram.</p><input id="un" placeholder="@username" autocapitalize="none"><button style="width:100%" onclick="authStart()">Продолжить</button>${m}</div>`;
+ if(lg.step=='password')return `<div class="card"><h3>@${esc(lg.u)}</h3><input id="pw" type="password" placeholder="Пароль"><button style="width:100%" onclick="authPw()">Войти</button><div class="row" style="margin-top:8px"><button class="g" onclick="authForgot()">Забыли пароль?</button>${bk}</div>${m}</div>`;
+ return `<div class="card"><h3>Подтверждение @${esc(lg.u)}</h3><p class="mu">${lg.manual?'Код пришлёт администратор в Unixgram на этот юзернейм, обычно в течение нескольких минут. Введите его:':'Бот отправил код вам в Unixgram. Введите его:'}</p><input id="cd" placeholder="Код" inputmode="numeric"><button style="width:100%" onclick="verify()">Подтвердить</button><div class="row" style="margin-top:8px">${bk}</div>${m}</div>`}
+function pwView(){return `<div class="card"><h3>Придумайте пароль</h3><p class="mu">Вы подтвердили @${esc(S.user)}. Пароль понадобится для следующих входов (от 8 символов).</p><input id="p1" type="password" placeholder="Пароль"><input id="p2" type="password" placeholder="Повторите пароль"><button style="width:100%" onclick="setPw()">Сохранить и войти</button><div>${msg}</div></div>`}
+const saveTk=t=>{tk=t;try{localStorage.setItem('tk',t)}catch(e){}};
+async function authStart(){const u=$('un').value.replace(/^@/,'').trim();try{const d=await api('auth/start',{username:u});lg={u,...d};msg=''}catch(e){msg=er(e)}render()}
+async function authForgot(){try{const d=await api('auth/forgot',{username:lg.u});lg={u:lg.u,...d};msg=''}catch(e){msg=er(e)}render()}
+async function authPw(){try{const d=await api('auth/password',{username:lg.u,password:$('pw').value});saveTk(d.token);lg=null;msg='';await load()}catch(e){msg=er(e);render()}}
+async function verify(){try{const d=await api('login/verify',{username:lg.u,code:$('cd').value});saveTk(d.token);lg=null;msg='';await load()}catch(e){msg=er(e);render()}}
+async function setPw(){const a=$('p1').value;if(a!==$('p2').value){msg=er(new Error('Пароли не совпадают'));return render()}try{const d=await api('account/password',{password:a});saveTk(d.token);msg='';await load()}catch(e){msg=er(e);render()}}
+async function logout(){try{await api('logout',{})}catch(e){}tk=null;S=null;A=null;try{localStorage.removeItem('tk')}catch(e){}render()}
+// Главная
+const off=()=>'<div class="card mu">Игра временно отключена</div>';
+function homeView(){const O=S.cfg.on,T=(t,on,e,n,d,c)=>`<div class="tile${on?'':' off'}" style="--g:${c}" ${on?`onclick="go('${t}')"`:''}><div class="te">${e}</div><div><b>${n}</b><div class="mu2">${on?d:'Временно отключено'}</div></div></div>`;
+ return T('cases',O.cases,'📦','Кейсы','Открывайте кейсы и собирайте предметы','linear-gradient(135deg,#ff3d9a,#7c5cff)')+T('rock',O.rocket,'🚀','Rockets','Заберите выигрыш до взрыва','linear-gradient(135deg,#0ea5e9,#6366f1)')+T('mines',O.mines,'💣','Сапёр','Открывайте клетки и обходите мины','linear-gradient(135deg,#10b981,#0ea5e9)')}
+// Сапёр (все расчёты на сервере)
+let mg=null;
+function minesView(){if(!S.cfg.on.mines)return off();return `<div class="card"><div class="mgh"><span class="chip" id="mgm">x1.00</span><span class="mu">💎 множитель растёт с каждой клеткой</span></div><div class="mgrid" id="mgrid"></div><div class="mu" id="mgs"></div></div><div class="card" id="mgc"></div>`}
+function mgDraw(){const g=$('mgrid');if(!g)return;const C=S.cfg.m,N=mg?mg.size:C.n,d=Math.min(3,C.max);g.style.gridTemplateColumns=`repeat(${N},1fr)`;let h='';
+ for(let i=0;i<N*N;i++){const op=mg&&mg.opened.includes(i),bm=mg&&mg.pos&&mg.pos.includes(i);
+  h+=`<button class="mc${op?' ok':''}${bm?(mg.hit===i?' hit':' dim'):''}" ${mg&&mg.run?'':'disabled'} onclick="mgOpen(${i})">${op?'💎':bm?(mg.hit===i?'💥':'💣'):''}</button>`}
+ g.innerHTML=h;$('mgm').textContent='x'+(mg?mg.mult:1).toFixed(2);
+ $('mgc').innerHTML=mg&&mg.run?`<button class="r" style="width:100%" onclick="mgOut()">Забрать ${Math.floor(mg.bet*mg.mult)} ⭐</button><div class="mu" style="margin-top:6px">Следующая клетка: ${mg.next?'x'+mg.next.toFixed(2):'—'}</div>`:`<input id="mb" type="number" placeholder="Ставка ${C.bmin}–${C.bmax} ⭐" value="${mg?mg.bet:Math.max(10,C.bmin)}"><div class="mu">Мин на поле: <b id="mn">${mg?mg.mc:d}</b></div><input id="mm" type="range" style="padding:0" min="${C.min}" max="${C.max}" value="${mg?mg.mc:d}" oninput="$('mn').textContent=this.value"><button style="width:100%" onclick="mgStart()">Начать игру</button>`}
+async function mgInit(){if(!S.cfg.on.mines)return;try{const d=await api('mines/status');if(d.none){if(mg&&mg.run)mg=null}else mg={...d,run:1}}catch(e){}mgDraw()}
+async function mgStart(){try{const d=await api('mines/start',{bet:Math.floor(+$('mb').value),mines:+$('mm').value});S.bal-=d.bet;updBal();mg={...d,run:1};$('mgs').textContent='';mgDraw()}catch(e){$('mgs').innerHTML=er(e)}}
+async function mgOpen(i){if(!mg||!mg.run||mg.busy)return;mg.busy=1;try{const d=await api('mines/open',{i});
+ if(d.boom){mg={...mg,run:0,busy:0,pos:d.pos,hit:d.i};$('mgs').innerHTML='<span class="er">💥 Мина! Ставка потеряна</span>';try{navigator.vibrate&&navigator.vibrate([80,40,80])}catch(e){}}
+ else if(d.done){S.bal+=d.win;updBal();mg={...mg,run:0,busy:0,opened:d.opened,pos:d.pos,mult:d.mult};$('mgs').innerHTML=`<span class="ok">Все клетки открыты! +${d.win} ⭐</span>`}
+ else mg={...mg,busy:0,opened:d.opened,mult:d.mult,next:d.next};
+ mgDraw()}catch(e){mg.busy=0;$('mgs').innerHTML=er(e)}}
+async function mgOut(){try{const d=await api('mines/cashout',{});S.bal+=d.win;updBal();mg={...mg,run:0,pos:d.pos,mult:d.mult};$('mgs').innerHTML=`<span class="ok">Забрано ${d.win} ⭐</span>`;mgDraw()}catch(e){$('mgs').innerHTML=er(e)}}
+// Кейсы
+const tier=v=>v<=0?0:v<30?1:v<150?2:3,IC=['💨','🪙','💎','👑'];
+function casesView(){if(!S.cfg.on.cases)return off();return S.cases.map(c=>`<div class="card"><div class="case"><div class="bx">📦</div><div style="flex:1"><b>${esc(c.name)}</b><div class="mu">⭐ ${c.price}</div></div><button onclick="openCase(${c.id})">Открыть</button></div><div class="tags">${c.items.map(i=>`<span class="tag t${tier(i.value)}">${esc(i.name)} ${pc(c,i)}%</span>`).join('')}</div></div>`).join('')}
+let busy=0;
+const pick=c=>{let r=Math.random()*sm(c);for(const i of c.items){if((r-=i.w)<0)return i}return c.items[0]};
+async function openCase(id){if(busy)return;busy=1;try{const d=await api('case/open',{id}),c=S.cases.find(x=>x.id==id);roll(c,d.item)}catch(e){msg=er(e);busy=0;render()}}
+const cellH=i=>{const t=tier(i.value);return `<div class="cell t${t}"><div class="ic">${IC[t]}</div><b>${esc(i.name)}</b><span>${i.value} ⭐</span></div>`};
+function roll(c,win){const W=34,cells=[];for(let k=0;k<44;k++)cells.push(k==W?win:pick(c));
+ const o=document.createElement('div');o.className='ov';o.id='ov';
+ o.innerHTML=`<div class="mu" style="text-align:center">${esc(c.name)}</div><div class="rl"><div class="mk"></div><div class="tr" id="tr">${cells.map(cellH).join('')}</div></div><div id="rv" style="min-height:130px"></div>`;
+ document.body.appendChild(o);
+ const tr=$('tr'),vw=o.querySelector('.rl').clientWidth,x=W*104+48-vw/2+(Math.random()-.5)*60;
+ tr.style.transition='none';tr.style.transform='translateX(0)';tr.getBoundingClientRect();
+ tr.style.transition='transform 5s cubic-bezier(.1,.75,.15,1)';tr.style.transform=`translateX(${-x}px)`;
+ setTimeout(()=>{const t=tier(win.value);$('rv').innerHTML=`<div class="res t${t}"><div style="font-size:54px">${IC[t]}</div><h2>${win.value>0?esc(win.name):'Пусто'}</h2><div class="mu">${win.value>0?win.value+' ⭐ — в инвентаре':'В этот раз не повезло'}</div><button style="margin-top:10px" onclick="closeOv()">Закрыть</button></div>`;try{navigator.vibrate&&navigator.vibrate(win.value>0?[40,40,80]:30)}catch(e){}},5200)}
+async function closeOv(){const o=$('ov');if(o)o.remove();busy=0;await load()}
+// Инвентарь
+function invView(){return (S.inv.length?S.inv.map(i=>`<div class="card case t${tier(i.value)}"><div class="bx" style="animation:none">${IC[tier(i.value)]}</div><div style="flex:1"><b>${esc(i.name)}</b><div class="mu">${i.value} ⭐</div></div><div style="display:flex;flex-direction:column;gap:6px"><button onclick="sell(${i.id})">Продать ${Math.floor(i.value*(100-S.cfg.sell_fee)/100)}</button><button class="g" onclick="act('inv/withdraw',{id:${i.id}},()=>'Заявка на вывод предмета отправлена')">Вывести</button></div></div>`).join(''):'<div class="card mu">Инвентарь пуст</div>')+`<div class="mu">Комиссия продажи: ${S.cfg.sell_fee}%</div>`+myReqs()}
+function sell(id){act('inv/sell',{id},d=>`Продано за ${d.get} ⭐`)}
+// Баланс
+function depCard(){return S.cfg.botOn?`<div class="card"><h3>Пополнение</h3><p class="mu">Укажите сумму: бот @${esc(S.cfg.bot)} пришлёт вам счёт в Unixgram. Оплатите его, и баланс пополнится автоматически.</p><input id="da" type="number" placeholder="Сумма ⭐"><button onclick="dep()">Получить счёт</button><div class="mu">Комиссия пополнения: ${S.cfg.dep_fee}%</div></div>`:`<div class="card"><h3>Пополнение</h3><p class="mu">1. Отправьте звёзды в Unixgram на аккаунт <b>@${esc(S.cfg.recv)}</b>.<br>2. Укажите юзернейм Unixgram, с которого отправили звёзды, и сумму. Админ проверит перевод и подтвердит заявку.</p><input id="du" placeholder="Ваш @username в Unixgram"><input id="da" type="number" placeholder="Сумма ⭐"><button onclick="dep()">Отправить заявку</button><div class="mu">Комиссия пополнения: ${S.cfg.dep_fee}%</div></div>`}
+function depView(){return depCard()+`
+<div class="card"><h3>Вывод звёзд</h3><input id="wa" type="number" placeholder="Сумма ⭐"><button onclick="act('withdraw',{amount:$('wa').value},()=>'Заявка на вывод отправлена')">Подать заявку</button></div>${myReqs()}`}
+async function dep(){try{await api('deposit',{amount:Math.floor(+$('da').value),from:$('du')?$('du').value:''});if(S.cfg.botOn){msg='Счёт отправлен в чат с ботом @'+esc(S.cfg.bot)+'. Оплатите его, баланс обновится сам.';render();pollBal()}else{msg='Заявка на пополнение отправлена, ждите подтверждения';await load()}}catch(e){msg=er(e);render()}}
+function pollBal(){clearInterval(pl);let n=0;const b0=S.bal;pl=setInterval(async()=>{try{S=await api('state');updBal();if(S.bal>b0){clearInterval(pl);msg='<b class="ok">Баланс пополнен</b>';render()}}catch(e){}if(++n>36)clearInterval(pl)},5000)}
+const stl={new:'⏳ ожидает',done:'✅ выполнено',no:'❌ отклонено'};
+const rd=r=>r.type=='stars'?`Вывод звёзд: ${r.amount} ⭐`:r.type=='dep'?`Пополнение: @${esc(r.from_user)} перевёл ${r.amount} ⭐ → зачислить ${Math.floor(r.amount*(100-S.cfg.dep_fee)/100)} ⭐`:`Вывод предмета: ${esc(r.item_name)} (${r.item_value} ⭐)`;
+function myReqs(){return S.reqs.length?`<div class="card"><b>Мои заявки</b>${S.reqs.map(r=>`<div class="mu">${rd(r)} — ${stl[r.status]}</div>`).join('')}</div>`:''}
+// Rockets (всё считает сервер, клиент только рисует)
+function rockView(){if(!S.cfg.on.rocket)return off();return `<div class="card"><div class="sky" id="sky"><div class="stars"></div><div class="rk" id="rk">🚀</div><div class="mx" id="mx">1.00x</div></div><input id="bt" type="number" min="1" placeholder="Ставка ${S.cfg.rb[0]}–${S.cfg.rb[1]} ⭐" value="${Math.max(10,S.cfg.rb[0])}" style="margin-top:12px"><div class="row"><button onclick="rkStart()">Старт</button><button class="r" onclick="rkOut()">Забрать</button></div><div class="mu" id="rs"></div></div>`}
+function updBal(){const e=$('bal');if(e)e.textContent='⭐ '+S.bal}
+function rkStop(){clearInterval(rt);clearInterval(rp);rt=rp=null}
+function rkDraw(m){const s=$('sky'),r=$('rk'),x=$('mx');if(!s||!r||!x)return;const p=Math.min(1,Math.log(m)/Math.log(10)),W=s.clientWidth-80,H=s.clientHeight-130;r.style.transform=`translate(${p*W*.85}px,${-p*H}px)`;x.textContent=m.toFixed(2)+'x';x.className='mx'+(m>=5?' hi':m>=2?' mid':'')}
+function rkRun(m0){rkStop();const t=Date.now(),s=$('sky'),r=$('rk');if(s)s.className='sky fly';if(r)r.textContent='🚀';
+ rt=setInterval(()=>{if(!$('sky')){rkStop();return}rkDraw(m0*Math.exp(0.00012*(Date.now()-t)))},50);
+ rp=setInterval(async()=>{try{const d=await api('rocket/status');if(!$('sky')){rkStop();return}if(d.crashed)rkCrash(d.crash);else if(d.none)rkStop()}catch(e){}},500)}
+function rkCrash(c){rkStop();const s=$('sky');if(s){s.className='sky boom';$('rk').textContent='💥';const x=$('mx');x.textContent=c.toFixed(2)+'x';x.className='mx'}const r=$('rs');if(r)r.textContent='Ракета взорвалась, ставка потеряна';try{navigator.vibrate&&navigator.vibrate([80,40,80])}catch(e){}}
+async function rkInit(){try{const d=await api('rocket/status');if(d.run)rkRun(d.m)}catch(e){}}
+async function rkStart(){try{const bet=Math.floor(+$('bt').value);const d=await api('rocket/start',{bet});S.bal-=d.bet;updBal();$('rs').textContent='';rkDraw(1);rkRun(1)}catch(e){$('rs').innerHTML=er(e)}}
+async function rkOut(){try{const d=await api('rocket/cashout',{});if(d.crashed){rkCrash(d.crash);return}rkStop();S.bal+=d.win;updBal();$('sky').className='sky win';$('mx').textContent=d.m.toFixed(2)+'x';$('rs').textContent='Выигрыш: '+d.win+' ⭐'}catch(e){$('rs').innerHTML=er(e)}}
+// Админка
+function setPct(ci,ii,v){const it=EC[ci].items,s=sm(EC[ci]),P=it.map(x=>x.w/s*100);v=it.length==1?100:Math.min(100,Math.max(0,v||0));const so=P.reduce((a,b,k)=>k==ii?a:a+b,0);
+ it.forEach((x,k)=>{x.w=k==ii?v:+(so>0?P[k]*(100-v)/so:(100-v)/(it.length-1)).toFixed(2)});render()}
+function addItem(ci){const it=EC[ci].items;it.push({name:'Приз',value:10,w:10});const s=sm(EC[ci]);it.forEach(x=>x.w=+(x.w/s*100).toFixed(2));render()}
+function delItem(ci,ii){const it=EC[ci].items;it.splice(ii,1);if(it.length){const s=sm(EC[ci]);it.forEach(x=>x.w=+(x.w/s*100).toFixed(2))}render()}
+function saveCase(ci){const c=EC[ci];act('admin/case',{id:c.id,name:c.name,price:c.price,items:c.items},()=>'Кейс сохранён')}
+function delCase(ci){if(EC[ci].id)act('admin/case/delete',{id:EC[ci].id},()=>'Кейс удалён');else{EC.splice(ci,1);render()}}
+const FLD=[['site','Название сайта','t'],['dep_fee','Комиссия пополнения %'],['sell_fee','Комиссия продажи % (идёт на @gold)'],['dmin','Минимальное пополнение ⭐'],['wmin','Минимальный вывод ⭐'],['code_ttl','Срок жизни кода верификации, минут (1–1440)'],['on_cases','Кейсы включены (1 или 0)'],['on_rocket','Rockets включена (1 или 0)'],['on_mines','Сапёр включён (1 или 0)'],['rtp','Rockets: возврат игрокам % (50–100)'],['r1','Rockets: шанс краша на 1.00x % (0–90)'],['rmax','Rockets: максимальный множитель'],['rbmin','Rockets: минимальная ставка'],['rbmax','Rockets: максимальная ставка'],['mn','Сапёр: размер поля (3–7)'],['mmin','Сапёр: минимум мин'],['mmax','Сапёр: максимум мин'],['mrtp','Сапёр: возврат игрокам % (50–100)'],['mbmin','Сапёр: минимальная ставка'],['mbmax','Сапёр: максимальная ставка'],['mcap','Сапёр: максимальный множитель'],['bot','Юз бота','t'],['recv','Аккаунт для пополнения (режим без бота)','t']];
+function saveCfg(){const o={};FLD.forEach(([k])=>o[k]=$('cf_'+k).value);act('admin/settings',o,()=>'Настройки сохранены')}
+function admView(){
+ if(!S.adm)return `<div class="card"><input id="ap" type="password" placeholder="Пароль админки"><button onclick="admLogin()">Войти</button></div>`;
+ if(!A)return '<div class="mu">Загрузка…</div>';
+ let h=EC.map((c,ci)=>`<div class="card"><div class="it"><input value="${esc(c.name)}" onchange="EC[${ci}].name=this.value"><input class="sm" type="number" value="${c.price}" onchange="EC[${ci}].price=+this.value"></div>
+ <div class="mu">Название · приз ⭐ · шанс % (остальные подстраиваются, сумма 100%)</div>
+ ${c.items.map((i,ii)=>`<div class="it"><input value="${esc(i.name)}" onchange="EC[${ci}].items[${ii}].name=this.value"><input class="sm" type="number" value="${i.value}" onchange="EC[${ci}].items[${ii}].value=+this.value"><input class="sm" type="number" step="0.01" value="${pc(c,i)}" onchange="setPct(${ci},${ii},+this.value)"><button class="g sm" onclick="delItem(${ci},${ii})">✕</button></div>`).join('')}
+ <div class="row"><button class="g" onclick="addItem(${ci})">+ приз</button><button onclick="saveCase(${ci})">Сохранить</button><button class="r" onclick="delCase(${ci})">Удалить</button></div></div>`).join('');
+ h+=`<button onclick="EC.push({id:0,name:'Новый кейс',price:10,items:[{name:'Приз',value:10,w:100}]});render()">+ Новый кейс</button>`;
+ const c=A.cfg;
+ h+=`<div class="card"><b>Настройки</b>${FLD.map(([k,l,t])=>`<div class="mu">${l}</div><input id="cf_${k}" ${t?'':'type="number"'} value="${esc(c[k])}">`).join('')}<button onclick="saveCfg()">Сохранить</button></div>`;
+ h+=`<div class="card"><b>Коды верификации (${(A.vr||[]).length})</b><div class="mu">Отправьте код человеку в Unixgram со своего аккаунта на указанный юзернейм и нажмите ✓.</div>${(A.vr||[]).map(v=>`<div class="it"><span style="flex:1">@${esc(v.username)}: <b>${esc(v.code)}</b></span><button class="sm" onclick="vSent('${esc(v.username)}')">✓</button></div>`).join('')||'<div class="mu">Нет новых</div>'}<button class="g" onclick="loadAdmin()">Обновить</button></div>`;
+ h+=`<div class="card"><b>Заявки (${A.reqs.length})</b>${A.reqs.map(r=>`<div class="it"><span style="flex:1">@${esc(r.user)}: ${rd2(r)}</span><button class="sm" onclick="reqAct(${r.id},1)">✓</button><button class="r sm" onclick="reqAct(${r.id},0)">✕</button></div>`).join('')||'<div class="mu">Нет новых</div>'}</div>`;
+ if(S.owner)h+=`<div class="card"><b>Токен бота Unixgram</b><input id="bt2" type="password" placeholder="Токен бота"><button onclick="act('admin/bot',{token:$('bt2').value},()=>'Бот подключён, вебхук установлен')">Подключить</button></div><div class="card"><b>Админы (только владелец)</b>${A.admins.map(n=>`<div class="it"><span style="flex:1">@${esc(n)}</span><button class="r sm" onclick="act('admin/admins',{name:'${esc(n)}',remove:1})">✕</button></div>`).join('')}<div class="it"><input id="na" placeholder="@username"><button class="sm" onclick="act('admin/admins',{name:$('na').value})">+</button></div><input id="np" type="password" placeholder="Новый пароль (от 8 символов)"><button class="g" onclick="act('admin/password',{password:$('np').value},()=>'Пароль изменён')">Сменить пароль</button></div>`;
+ return h}
+const rd2=r=>rd({...r})+(r.type=='dep'&&r.from_user!=r.user?`<br><span class="er">⚠️ перевод с @${esc(r.from_user)}, а аккаунт @${esc(r.user)}: проверьте</span>`:'');
+function vSent(u){act('admin/vsent',{u},()=>'Отмечено')}
+function reqAct(id,ok){act('admin/req',{id,ok},()=>ok?'Заявка подтверждена':'Заявка отклонена')}
+async function admLogin(){try{await api('admin/login',{password:$('ap').value});msg='';await load();await loadAdmin()}catch(e){msg=er(e);render()}}
+if(tk)load();else render();
+</script></body></html>
