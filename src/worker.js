@@ -53,7 +53,7 @@ const SPEC = {
 async function cfg(DB) {
   const o = { bot: 'unixbot', recv: 'unix_stars_bank', site: 'Unix Stars' };
   for (const k in SPEC) o[k] = String(SPEC[k][2]);
-  for (const x of (await DB.prepare("SELECT k,v FROM settings WHERE k NOT IN ('pass','token')").all()).results) o[x.k] = x.v;
+  for (const x of (await DB.prepare("SELECT k,v FROM settings WHERE k NOT IN ('pass','token','offset','poll_at')").all()).results) o[x.k] = x.v;
   return o;
 }
 // множитель Сапёра после k открытых клеток
@@ -98,10 +98,30 @@ async function hook(DB, env, up) {
       ]);
       try { await bot(DB, env, 'sendMessage', { chat_id: m.chat.id, text: `Зачислено ${get} ⭐` }); } catch {}
     }
-  } else if (typeof m.text === 'string' && m.text.startsWith('/start')) {
+  } else if (String(m.text ?? m.body ?? '').startsWith('/start')) {
     try { await bot(DB, env, 'sendMessage', { chat_id: m.chat.id, text: 'Это бот сайта. Вернитесь на сайт и запросите код входа.' }); } catch {}
   }
   return J({ ok: 1 });
+}
+const setK = (DB, k, v) => DB.prepare('INSERT INTO settings(k,v) VALUES(?1,?2) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(k, String(v)).run();
+// Получение событий опросом getUpdates: вебхук и секреты не нужны
+async function pollBot(DB, env) {
+  if (!(await botOn(DB, env))) return;
+  const now = Date.now();
+  const lk = await DB.prepare("INSERT INTO settings(k,v) VALUES('poll_at',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v WHERE CAST(settings.v AS INTEGER) < ?2").bind(String(now), now - 2500).run();
+  if (!lk.meta.changes) return;
+  try {
+    const off = +((await DB.prepare("SELECT v FROM settings WHERE k='offset'").first())?.v || 0);
+    const ups = await bot(DB, env, 'getUpdates', { ...(off ? { offset: off } : {}), timeout: 0, limit: 100 });
+    let last = 0;
+    for (const up of Array.isArray(ups) ? ups : []) {
+      try { await hook(DB, env, up); } catch {}
+      last = Math.max(last, +up.update_id || 0);
+      await setK(DB, 'last_upd', JSON.stringify(up).slice(0, 700));
+    }
+    if (last) await setK(DB, 'offset', last + 1);
+    await setK(DB, 'bot_err', '');
+  } catch (e) { await setK(DB, 'bot_err', String(e.message || e).slice(0, 200)); }
 }
 const botOn = async (DB, env) => !!((await DB.prepare("SELECT v FROM settings WHERE k='token'").first())?.v || env.BOT_TOKEN);
 const isAdm = async (DB, u) => u === OWNER || !!(await DB.prepare('SELECT 1 x FROM admins WHERE name=?').bind(u).first());
@@ -122,6 +142,12 @@ async function issueCode(DB, env, u) {
 const newTok = (pre = '') => pre + crypto.randomUUID() + crypto.randomUUID();
 
 export default {
+  async scheduled(ev, env, ctx) {
+    ctx.waitUntil((async () => {
+      await ensure(env.DB);
+      for (let i = 0; i < 4; i++) { await pollBot(env.DB, env); if (i < 3) await new Promise(r => setTimeout(r, 14000)); }
+    })());
+  },
   async fetch(req, env) {
     const p = new URL(req.url).pathname;
     if (!p.startsWith('/api/')) return env.ASSETS.fetch(req);
@@ -212,6 +238,7 @@ async function route(req, env, p) {
       return J({ ok: 1 });
 
     case 'state': {
+      if (await DB.prepare("SELECT 1 x FROM deposits WHERE user=? AND status='new' AND created>?").bind(u, Date.now() - 900000).first()) await pollBot(DB, env);
       const [a, inv, cs, its, rq] = await DB.batch([
         DB.prepare('SELECT bal FROM users WHERE name=?').bind(u),
         DB.prepare('SELECT id,name,value FROM inv WHERE user=? ORDER BY id DESC').bind(u),
@@ -514,14 +541,30 @@ async function route(req, env, p) {
     case 'admin/bot': {
       if (u !== OWNER) return E('Только владелец', 403);
       const tk = String(b.token || '').trim();
-      if (!/^[\w:\-]{10,200}$/.test(tk)) return E('Неверный токен');
-      if (!env.WEBHOOK_SECRET) return E('Не задан секрет WEBHOOK_SECRET');
-      const r = await fetch(`${API}/api/bot/${tk}/setWebhook`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: new URL(req.url).origin + '/api/bot/hook', secret_token: env.WEBHOOK_SECRET }) });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || d.ok === false) return E(d.description || 'setWebhook не удался');
-      await DB.prepare("INSERT INTO settings(k,v) VALUES('token',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v").bind(tk).run();
-      return J({ ok: 1 });
+      if (!/^[\w:\-]{10,200}$/.test(tk)) return E('Неверный формат токена');
+      const call = async (m, p = {}) => {
+        const r = await fetch(`${API}/api/bot/${tk}/${m}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(p) });
+        const raw = await r.text(); let d = {}; try { d = JSON.parse(raw); } catch {}
+        if (!r.ok || d.ok === false) throw new Error(`${m}: ${d.description || ('HTTP ' + r.status + ' ' + raw.slice(0, 120))}`);
+        return d.result;
+      };
+      let me;
+      try { me = await call('getMe'); } catch (e) { return E('Токен не принят. ' + e.message); }
+      try { await call('deleteWebhook'); } catch {}
+      const name = cl(me?.username || '');
+      await DB.batch([
+        DB.prepare("INSERT INTO settings(k,v) VALUES('token',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v").bind(tk),
+        DB.prepare("DELETE FROM settings WHERE k IN ('offset','bot_err','last_upd')"),
+        ...(name ? [DB.prepare("INSERT INTO settings(k,v) VALUES('bot',?1) ON CONFLICT(k) DO UPDATE SET v=excluded.v").bind(name)] : [])
+      ]);
+      await pollBot(DB, env);
+      return J({ ok: 1, name });
     }
+
+    case 'admin/bot/off':
+      if (u !== OWNER) return E('Только владелец', 403);
+      await DB.prepare("DELETE FROM settings WHERE k IN ('token','offset','bot_err','last_upd')").run();
+      return J({ ok: 1 });
 
     case 'admin/password': {
       if (u !== OWNER) return E('Только владелец', 403);
