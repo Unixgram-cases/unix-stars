@@ -24,14 +24,18 @@ const DDL = [
   "CREATE TABLE IF NOT EXISTS tg_users(username TEXT PRIMARY KEY, chat_id INTEGER NOT NULL);",
   "CREATE TABLE IF NOT EXISTS deposits(id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'new', charge TEXT, created INTEGER);",
   "CREATE TABLE IF NOT EXISTS mines(id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, bet INTEGER NOT NULL, size INTEGER NOT NULL, mc INTEGER NOT NULL, pos TEXT NOT NULL, opened TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created INTEGER);",
-  "CREATE UNIQUE INDEX IF NOT EXISTS mines_active ON mines(user) WHERE status='active';"
+  "CREATE UNIQUE INDEX IF NOT EXISTS mines_active ON mines(user) WHERE status='active';",
+  "CREATE TABLE IF NOT EXISTS accounts(name TEXT PRIMARY KEY, pw TEXT NOT NULL, fails INTEGER NOT NULL DEFAULT 0, lock INTEGER NOT NULL DEFAULT 0);",
+  "CREATE TABLE IF NOT EXISTS vreq(username TEXT PRIMARY KEY, code TEXT NOT NULL, exp INTEGER NOT NULL, sent INTEGER NOT NULL DEFAULT 0);"
 ];
 let ready = false;
 async function ensure(DB) { if (ready) return; await DB.batch(DDL.map(q => DB.prepare(q))); ready = true; }
 
-async function hash(pw, salt) {
+const ITER = 15000; // пароли игроков
+const pwHash = (pw, salt) => hash(pw, salt, ITER);
+async function hash(pw, salt, iter = 100000) {
   const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
-  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 100000, hash: 'SHA-256' }, k, 256));
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: iter, hash: 'SHA-256' }, k, 256));
 }
 async function passOk(DB, env, pw) {
   pw = String(pw || '');
@@ -41,7 +45,7 @@ async function passOk(DB, env, pw) {
 }
 // [мин, макс, по умолчанию] — все числовые настройки, которые меняются в админке
 const SPEC = {
-  dep_fee: [0, 100, 5], sell_fee: [0, 100, 5], dmin: [0, 1e9, 0], wmin: [0, 1e9, 0],
+  dep_fee: [0, 100, 5], sell_fee: [0, 100, 5], dmin: [0, 1e9, 0], wmin: [0, 1e9, 0], code_ttl: [1, 1440, 30],
   on_cases: [0, 1, 1], on_rocket: [0, 1, 1], on_mines: [0, 1, 1],
   rtp: [50, 100, 97], r1: [0, 90, 0], rmax: [2, 10000, 1000], rbmin: [1, 1e9, 1], rbmax: [1, 1e9, 10000],
   mn: [3, 7, 5], mmin: [1, 48, 1], mmax: [1, 48, 10], mrtp: [50, 100, 97], mbmin: [1, 1e9, 1], mbmax: [1, 1e9, 10000], mcap: [2, 100000, 1000]
@@ -102,6 +106,21 @@ async function hook(DB, env, up) {
 const botOn = async (DB, env) => !!((await DB.prepare("SELECT v FROM settings WHERE k='token'").first())?.v || env.BOT_TOKEN);
 const isAdm = async (DB, u) => u === OWNER || !!(await DB.prepare('SELECT 1 x FROM admins WHERE name=?').bind(u).first());
 
+async function issueCode(DB, env, u) {
+  const old = await DB.prepare('SELECT sent FROM codes WHERE username=?').bind(u).first();
+  if (old && Date.now() - old.sent < 30000) return { err: 'Подождите 30 секунд перед повторной отправкой' };
+  const code = String(100000 + crypto.getRandomValues(new Uint32Array(1))[0] % 900000), on = await botOn(DB, env), exp = Date.now() + +(await cfg(DB)).code_ttl * 60000;
+  if (on) {
+    try { await bot(DB, env, 'sendMessage', { chat_id: await chatOf(DB, u), text: `Код входа: ${code}\nНикому не сообщайте.` }); }
+    catch (e) { return { err: `Не удалось отправить код. Откройте бота @${(await cfg(DB)).bot}, нажмите Start и повторите.` }; }
+  }
+  const st = [DB.prepare('INSERT INTO codes(username,hash,exp,tries,sent) VALUES(?1,?2,?3,0,?4) ON CONFLICT(username) DO UPDATE SET hash=excluded.hash,exp=excluded.exp,tries=0,sent=excluded.sent').bind(u, await sha(code + ':' + u), exp, Date.now())];
+  if (!on) st.push(DB.prepare('INSERT INTO vreq(username,code,exp,sent) VALUES(?1,?2,?3,0) ON CONFLICT(username) DO UPDATE SET code=excluded.code,exp=excluded.exp,sent=0').bind(u, code, exp));
+  await DB.batch(st);
+  return { manual: !on, bot: (await cfg(DB)).bot };
+}
+const newTok = (pre = '') => pre + crypto.randomUUID() + crypto.randomUUID();
+
 export default {
   async fetch(req, env) {
     const p = new URL(req.url).pathname;
@@ -115,29 +134,32 @@ async function route(req, env, p) {
   let b = {};
   if (req.method === 'POST') { try { b = await req.json(); } catch {} }
 
-  if (p === 'login') {
+  if (p === 'auth/start' || p === 'auth/forgot') {
     const u = cl(b.username);
     if (u.length < 3) return E('Юзернейм минимум 3 символа');
-    if (!(await botOn(DB, env))) { // режим без бота: вход только по юзернейму
-      const t = crypto.randomUUID() + crypto.randomUUID();
-      await DB.batch([
-        DB.prepare('INSERT OR IGNORE INTO users(name,bal) VALUES(?,0)').bind(u),
-        DB.prepare('INSERT INTO sessions(token,user,adm,created) VALUES(?,?,0,?)').bind(t, u, Date.now())
-      ]);
-      return J({ token: t });
+    if (p === 'auth/start' && await DB.prepare('SELECT 1 x FROM accounts WHERE name=?').bind(u).first()) return J({ step: 'password' });
+    const r = await issueCode(DB, env, u);
+    if (r.err) return E(r.err);
+    return J({ step: 'code', manual: r.manual, bot: r.bot });
+  }
+
+  if (p === 'auth/password') {
+    const u = cl(b.username);
+    const a = await DB.prepare('SELECT pw,fails,lock FROM accounts WHERE name=?').bind(u).first();
+    if (!a) return E('Аккаунт не найден');
+    if (a.lock > Date.now()) return E('Слишком много попыток. Подождите 15 минут или сбросьте пароль');
+    const [sl, x] = a.pw.split(':');
+    if ((await pwHash(String(b.password || ''), sl)) !== x) {
+      const f = a.fails + 1;
+      await DB.prepare('UPDATE accounts SET fails=?1, lock=?2 WHERE name=?3').bind(f >= 5 ? 0 : f, f >= 5 ? Date.now() + 900000 : 0, u).run();
+      return E('Неверный пароль');
     }
-    const old = await DB.prepare('SELECT sent FROM codes WHERE username=?').bind(u).first();
-    if (old && Date.now() - old.sent < 30000) return E('Подождите 30 секунд перед повторной отправкой');
-    const code = String(100000 + crypto.getRandomValues(new Uint32Array(1))[0] % 900000);
-    try {
-      await bot(DB, env, 'sendMessage', { chat_id: await chatOf(DB, u), text: `Код входа: ${code}\nНикому не сообщайте.` });
-    } catch (e) {
-      const c = await cfg(DB);
-      return E(e.message === 'Бот не подключён' ? e.message : `Не удалось отправить код. Откройте бота @${c.bot}, нажмите Start и повторите.`);
-    }
-    await DB.prepare('INSERT INTO codes(username,hash,exp,tries,sent) VALUES(?1,?2,?3,0,?4) ON CONFLICT(username) DO UPDATE SET hash=excluded.hash,exp=excluded.exp,tries=0,sent=excluded.sent')
-      .bind(u, await sha(code + ':' + u), Date.now() + 300000, Date.now()).run();
-    return J({ sent: 1, bot: (await cfg(DB)).bot });
+    const t = newTok();
+    await DB.batch([
+      DB.prepare('UPDATE accounts SET fails=0, lock=0 WHERE name=?').bind(u),
+      DB.prepare('INSERT INTO sessions(token,user,adm,created) VALUES(?,?,0,?)').bind(t, u, Date.now())
+    ]);
+    return J({ token: t });
   }
 
   if (p === 'login/verify') {
@@ -146,9 +168,10 @@ async function route(req, env, p) {
     if (!r || r.exp < Date.now()) return E('Код истёк, запросите новый');
     if (r.tries >= 5) { await DB.prepare('DELETE FROM codes WHERE username=?').bind(u).run(); return E('Слишком много попыток, запросите новый код'); }
     if ((await sha(c + ':' + u)) !== r.hash) { await DB.prepare('UPDATE codes SET tries=tries+1 WHERE username=?').bind(u).run(); return E('Неверный код'); }
-    const t = crypto.randomUUID() + crypto.randomUUID();
+    const t = newTok('pw-'); // сессия «до установки пароля»: доступно только задать пароль
     await DB.batch([
       DB.prepare('DELETE FROM codes WHERE username=?').bind(u),
+      DB.prepare('DELETE FROM vreq WHERE username=?').bind(u),
       DB.prepare('INSERT OR IGNORE INTO users(name,bal) VALUES(?,0)').bind(u),
       DB.prepare('INSERT INTO sessions(token,user,adm,created) VALUES(?,?,0,?)').bind(t, u, Date.now())
     ]);
@@ -164,12 +187,26 @@ async function route(req, env, p) {
   const s = t && await DB.prepare('SELECT user,adm FROM sessions WHERE token=?').bind(t).first();
   if (!s) return E('Нужен вход', 401);
   const u = s.user;
+  if (t.startsWith('pw-') && !['state', 'account/password', 'logout'].includes(p)) return E('Сначала установите пароль', 403);
 
   if (p.startsWith('admin/') && p !== 'admin/login') {
     if (!(s.adm === 1 && await isAdm(DB, u))) return E('Нет доступа', 403);
   }
 
   switch (p) {
+    case 'account/password': {
+      const pw = String(b.password || '');
+      if (!t.startsWith('pw-')) return E('Подтвердите аккаунт кодом', 403);
+      if (pw.length < 8 || pw.length > 128) return E('Пароль от 8 до 128 символов');
+      const sl = crypto.randomUUID(), nt = newTok();
+      await DB.batch([
+        DB.prepare('INSERT INTO accounts(name,pw,fails,lock) VALUES(?1,?2,0,0) ON CONFLICT(name) DO UPDATE SET pw=excluded.pw,fails=0,lock=0').bind(u, sl + ':' + await pwHash(pw, sl)),
+        DB.prepare('DELETE FROM sessions WHERE user=?').bind(u),
+        DB.prepare('INSERT INTO sessions(token,user,adm,created) VALUES(?,?,0,?)').bind(nt, u, Date.now())
+      ]);
+      return J({ token: nt });
+    }
+
     case 'logout':
       await DB.prepare('DELETE FROM sessions WHERE token=?').bind(t).run();
       return J({ ok: 1 });
@@ -192,7 +229,7 @@ async function route(req, env, p) {
           rb: [+c.rbmin, +c.rbmax],
           m: { n: +c.mn, min: Math.max(1, +c.mmin), max: Math.min(+c.mmax, +c.mn * +c.mn - 1), bmin: +c.mbmin, bmax: +c.mbmax }
         },
-        canAdm: adm, adm: adm && s.adm === 1, owner: u === OWNER
+        needPw: t.startsWith('pw-'), canAdm: adm, adm: adm && s.adm === 1, owner: u === OWNER
       });
     }
 
@@ -397,8 +434,13 @@ async function route(req, env, p) {
     case 'admin/data': {
       const rq = (await DB.prepare("SELECT id,user,type,amount,from_user,item_name,item_value FROM reqs WHERE status='new' ORDER BY id").all()).results;
       const ad = (await DB.prepare('SELECT name FROM admins ORDER BY name').all()).results.map(x => x.name);
-      return J({ reqs: rq, admins: ad, cfg: await cfg(DB) });
+      const vr = (await DB.prepare('SELECT username,code FROM vreq WHERE sent=0 AND exp>? ORDER BY exp').bind(Date.now()).all()).results;
+      return J({ reqs: rq, admins: ad, vr, cfg: await cfg(DB) });
     }
+
+    case 'admin/vsent':
+      await DB.prepare('UPDATE vreq SET sent=1 WHERE username=?').bind(cl(b.u)).run();
+      return J({ ok: 1 });
 
     case 'admin/req': {
       const q = await DB.prepare("SELECT * FROM reqs WHERE id=? AND status='new'").bind(+b.id).first();
