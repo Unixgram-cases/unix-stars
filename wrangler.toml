@@ -11,3 +11,6 @@ run_worker_first = ["/api/*"]
 binding = "DB"
 database_name = "unix-stars"
 database_id = "acd68ea2-30f9-45ff-81bb-04acd4c9c54b"
+
+[triggers]
+crons = ["* * * * *"]
