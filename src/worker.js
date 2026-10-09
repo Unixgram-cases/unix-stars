@@ -53,7 +53,7 @@ const SPEC = {
 async function cfg(DB) {
   const o = { bot: 'unixbot', recv: 'unix_stars_bank', site: 'Unix Stars' };
   for (const k in SPEC) o[k] = String(SPEC[k][2]);
-  for (const x of (await DB.prepare("SELECT k,v FROM settings WHERE k NOT IN ('pass','token','offset','poll_at')").all()).results) o[x.k] = x.v;
+  for (const x of (await DB.prepare("SELECT k,v FROM settings WHERE k NOT IN ('pass','token','offset','poll_at','ofail','olock')").all()).results) o[x.k] = x.v;
   return o;
 }
 // множитель Сапёра после k открытых клеток
@@ -163,10 +163,32 @@ async function route(req, env, p) {
   if (p === 'auth/start' || p === 'auth/forgot') {
     const u = cl(b.username);
     if (u.length < 3) return E('Юзернейм минимум 3 символа');
-    if (p === 'auth/start' && await DB.prepare('SELECT 1 x FROM accounts WHERE name=?').bind(u).first()) return J({ step: 'password' });
+    const hasAcc = !!(await DB.prepare('SELECT 1 x FROM accounts WHERE name=?').bind(u).first());
+    // Вход владельца без бота: код некому отправить, поэтому подтверждаем паролем администратора (секрет ADMIN_PASSWORD)
+    if (u === OWNER && !(await botOn(DB, env)) && (p === 'auth/forgot' || !hasAcc)) return J({ step: 'owner' });
+    if (p === 'auth/start' && hasAcc) return J({ step: 'password' });
     const r = await issueCode(DB, env, u);
     if (r.err) return E(r.err);
     return J({ step: 'code', manual: r.manual, bot: r.bot });
+  }
+
+  if (p === 'auth/owner') {
+    if (await botOn(DB, env)) return E('Бот подключён: используйте код из бота');
+    const lock = +((await DB.prepare("SELECT v FROM settings WHERE k='olock'").first())?.v || 0);
+    if (lock > Date.now()) return E('Слишком много попыток. Подождите 15 минут');
+    if (!(await passOk(DB, env, b.password))) {
+      const f = +((await DB.prepare("SELECT v FROM settings WHERE k='ofail'").first())?.v || 0) + 1;
+      await setK(DB, 'ofail', f >= 5 ? 0 : f);
+      await setK(DB, 'olock', f >= 5 ? Date.now() + 900000 : 0);
+      return E('Неверный пароль администратора');
+    }
+    const t = newTok('pw-');
+    await DB.batch([
+      DB.prepare("DELETE FROM settings WHERE k IN ('ofail','olock')"),
+      DB.prepare('INSERT OR IGNORE INTO users(name,bal) VALUES(?,0)').bind(OWNER),
+      DB.prepare('INSERT INTO sessions(token,user,adm,created) VALUES(?,?,0,?)').bind(t, OWNER, Date.now())
+    ]);
+    return J({ token: t });
   }
 
   if (p === 'auth/password') {
