@@ -65,7 +65,7 @@ input:focus{border-color:var(--ac)}
 .hub{position:absolute;left:50%;top:50%;width:17%;aspect-ratio:1;margin:-8.5% 0 0 -8.5%;border-radius:50%;background:var(--card);border:2px solid var(--bd);display:grid;place-items:center;font-weight:800;font-size:clamp(11px,3.2vw,17px);letter-spacing:.5px;z-index:2}
 /* профиль */
 .prof{display:flex;gap:14px;align-items:center}
-.ava{width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg,var(--ac),#8b5cf6);display:grid;place-items:center;font-size:30px;font-weight:800;flex:none}
+.ava{overflow:hidden;width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg,var(--ac),#8b5cf6);display:grid;place-items:center;font-size:30px;font-weight:800;flex:none}
 .badge{display:inline-block;font-size:11px;font-weight:700;color:var(--ac);border:1px solid var(--ac);border-radius:99px;padding:1px 8px;margin-left:6px;vertical-align:middle}
 .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
 .stat{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:12px 8px;text-align:center}
@@ -81,6 +81,7 @@ input:focus{border-color:var(--ac)}
 .rrow{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:10px 12px;margin:8px 0;cursor:pointer}
 .rrow:active{transform:scale(.985)}
 .pl{width:30px;text-align:center;font-weight:800;font-size:18px;color:var(--mu);flex:none}
+.ava img{width:100%;height:100%;object-fit:cover}
 .ava.s{width:42px;height:42px;font-size:19px}
 .rn{flex:1;min-width:0}.rn .bdgs{margin:4px 0 0}
 .rv{text-align:right;flex:none}.rv b{display:block;font-size:17px}.rv span{font-size:12px;color:var(--mu)}
@@ -117,7 +118,7 @@ input.clr{width:48px;flex:none;padding:2px;height:42px}
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S=null,tk=null,tab='cases',psub='inv',msg='',A=null,EC=[],EW={items:[]},EB=[],RT=null,RBY='opens',VU=null,BGU='',BGB=0,rt=null,rp=null,lg=null,pl=null;
+let S=null,tk=null,tab='cases',psub='inv',msg='',A=null,EC=[],EW={items:[]},EB=[],RT=null,RBY='opens',VU=null,BGU='',BGB=0,GVU='',GVA='',RAU='',rt=null,rp=null,lg=null,pl=null;
 try{tk=localStorage.getItem('tk')}catch(e){}
 async function api(p,b){
  const r=await fetch('/api/'+p,{method:b===undefined?'GET':'POST',headers:{'content-type':'application/json',...(tk?{authorization:'Bearer '+tk}:{})},body:b===undefined?undefined:JSON.stringify(b)});
@@ -232,22 +233,40 @@ async function wSpin(){if(wbusy||!S)return;const W=S.wheel,free=wFree();wbusy=1;
 // Рейтинг и профили других игроков
 const bdg=b=>`<span class="bdg" style="--bc:${esc(b.color)}">${b.img?imgTag(b.img):esc(b.icon||'🏅')}<span>${esc(b.name)}</span></span>`;
 const lt=n=>esc(String(n).charAt(0).toUpperCase());
-async function loadRating(){try{RT=await api('rating',{by:RBY})}catch(e){RT=null;msg=er(e)}if(tab=='rate')render()}
+async function loadRating(){try{RT=await api('rating',{by:RBY})}catch(e){RT=null}const l=$('rl');if(tab=='rate'&&l&&!QS.trim())l.innerHTML=rateList()}
 function setRate(by){RBY=by;RT=null;render();loadRating()}
-function rateView(){const rows=RT&&RT.by==RBY?RT.rows:null,m=['🥇','🥈','🥉'];
- return `<h1>Рейтинг</h1><p class="sub">Нажмите на игрока, чтобы открыть его профиль</p><div class="seg"><button class="${RBY=='opens'?'on':''}" onclick="setRate('opens')">Открытия кейсов</button><button class="${RBY=='donated'?'on':''}" onclick="setRate('donated')">Донат</button></div>`
- +(rows?(rows.length?rows.map((r,i)=>`<div class="rrow" onclick="openUser('${esc(r.name)}')"><div class="pl">${i<3?m[i]:i+1}</div><div class="ava s">${lt(r.name)}</div><div class="rn"><b>@${esc(r.name)}</b>${r.badges.length?`<div class="bdgs">${r.badges.map(bdg).join('')}</div>`:''}</div><div class="rv">${RBY=='opens'?`<b>${r.opens}</b><span>⭐ ${r.donated} донат</span>`:`<b>⭐ ${r.donated}</b><span>${r.opens} открытий</span>`}</div></div>`).join(''):'<div class="card mu">Пока никого нет</div>'):'<div class="mu">Загрузка…</div>')}
+let QS='',SR=null,qt=null;
+const av=(n,img,c)=>`<div class="ava ${c}">${img?imgTag(img):lt(n)}</div>`;
+function rrowH(r,place){const m=['🥇','🥈','🥉'];
+ return `<div class="rrow" onclick="openUser('${esc(r.name)}')">${place==null?'':`<div class="pl">${place<3?m[place]:place+1}</div>`}${av(r.name,r.avatar,'s')}<div class="rn"><b>@${esc(r.name)}</b>${r.badges.length?`<div class="bdgs">${r.badges.map(bdg).join('')}</div>`:''}</div><div class="rv">${place!=null&&RBY=='donated'?`<b>⭐ ${r.donated}</b><span>${r.opens} открытий</span>`:`<b>${r.opens}</b><span>⭐ ${r.donated} донат</span>`}</div></div>`}
+function rateList(){
+ if(QS.trim()){if(!SR)return '<div class="mu">Поиск…</div>';return SR.length?SR.map(r=>rrowH(r,null)).join(''):'<div class="card mu">Никого не найдено</div>'}
+ const rows=RT&&RT.by==RBY?RT.rows:null;
+ return rows?(rows.length?rows.map((r,i)=>rrowH(r,i)).join(''):'<div class="card mu">Пока никого нет</div>'):'<div class="mu">Загрузка…</div>'}
+function onSearch(v){QS=v;SR=null;clearTimeout(qt);const g=$('sg');if(g)g.style.display=v.trim()?'none':'';const l=$('rl');if(l)l.innerHTML=rateList();if(!v.trim())return;
+ qt=setTimeout(async()=>{let rows=[];try{rows=(await api('search',{q:v})).rows}catch(e){}if(QS!==v)return;SR=rows;const l=$('rl');if(l&&tab=='rate')l.innerHTML=rateList()},300)}
+function rateView(){
+ return `<h1>Рейтинг</h1><p class="sub">Нажмите на игрока, чтобы открыть его профиль</p><input id="qs" placeholder="🔍 Поиск игрока по юзернейму" value="${esc(QS)}" oninput="onSearch(this.value)" autocapitalize="none" autocomplete="off" style="margin-bottom:6px"><div class="seg" id="sg" style="${QS.trim()?'display:none':''}"><button class="${RBY=='opens'?'on':''}" onclick="setRate('opens')">Открытия кейсов</button><button class="${RBY=='donated'?'on':''}" onclick="setRate('donated')">Донат</button></div><div id="rl">${rateList()}</div>`}
+function pickAvatar(){const f=document.createElement('input');f.type='file';f.accept='image/*';
+ f.onchange=()=>{const file=f.files[0];if(!file)return;const url=URL.createObjectURL(file),im=new Image();
+  im.onload=async()=>{try{const sz=Math.min(im.width,im.height),c=document.createElement('canvas');c.width=c.height=256;c.getContext('2d').drawImage(im,(im.width-sz)/2,(im.height-sz)/2,sz,sz,0,0,256,256);
+   let data=c.toDataURL('image/webp',.85);if(!data.startsWith('data:image/webp'))data=c.toDataURL('image/jpeg',.85);
+   await api('avatar/set',{data});msg='<span class="ok">Фото профиля обновлено</span>';await load()}catch(e){msg=er(e);render()}URL.revokeObjectURL(url)};
+  im.onerror=()=>{msg=er(new Error('Не удалось прочитать картинку'));render()};im.src=url};
+ f.click()}
+async function delAvatar(){try{await api('avatar/set',{data:''});msg='Фото убрано';await load()}catch(e){msg=er(e);render()}}
 async function openUser(n){tab='user';VU=null;msg='';render();try{VU=await api('profile',{name:n})}catch(e){msg=er(e);tab='rate'}render()}
 function userView(){if(!VU)return '<div class="mu" style="margin-top:14px">Загрузка…</div>';const u=VU;
- return `<button class="g" style="margin:14px 0 4px" onclick="go('rate')">← Рейтинг</button><div class="card prof"><div class="ava">${lt(u.name)}</div><div style="min-width:0"><b style="font-size:20px">@${esc(u.name)}</b>${u.admin?'<span class="badge">Админ</span>':''}</div></div>
+ return `<button class="g" style="margin:14px 0 4px" onclick="go('rate')">← Рейтинг</button><div class="card prof">${av(u.name,u.avatar,'')}<div style="min-width:0"><b style="font-size:20px">@${esc(u.name)}</b>${u.admin?'<span class="badge">Админ</span>':''}</div></div>
  ${u.badges.length?`<div class="bdgs">${u.badges.map(bdg).join('')}</div>`:''}
  <div class="stats"><div class="stat"><b>${u.opens}</b><span>Открыто кейсов</span></div><div class="stat"><b>⭐ ${u.donated}</b><span>Задоначено</span></div><div class="stat"><b>${u.items}</b><span>Предметов</span></div><div class="stat"><b>⭐ ${u.worth}</b><span>Стоимость предметов</span></div></div>`
  +(u.top.length?`<h3 style="margin-top:16px">Лучшие предметы</h3><div class="igrid">${u.top.map(i=>`<div class="inv t${tier(i.value)}"><div class="ph">${imgTag(i.img,IC[tier(i.value)])}</div><b>${esc(i.name)}</b><div class="mu">${i.value} ⭐</div></div>`).join('')}</div>`:'')}
 // Профиль
 function profView(){const inv=S.inv,tot=inv.reduce((a,i)=>a+i.value,0);
  const sg=`<div class="seg"><button class="${psub=='inv'?'on':''}" onclick="psub='inv';render()">Инвентарь</button><button class="${psub=='bal'?'on':''}" onclick="psub='bal';render()">Баланс</button></div>`;
- return `<div class="card prof"><div class="ava">${esc(S.user.charAt(0).toUpperCase())}</div><div style="min-width:0"><b style="font-size:20px">@${esc(S.user)}</b>${S.canAdm?'<span class="badge">Админ</span>':''}<div class="mu">Игрок ${esc(S.cfg.site)}</div></div></div>
+ return `<div class="card prof">${av(S.user,S.avatar,'')}<div style="min-width:0"><b style="font-size:20px">@${esc(S.user)}</b>${S.canAdm?'<span class="badge">Админ</span>':''}<div class="mu">Игрок ${esc(S.cfg.site)}</div></div></div>
  ${S.badges.length?`<div class="bdgs">${S.badges.map(bdg).join('')}</div>`:''}
+ <div class="row" style="margin:8px 0"><button class="g" onclick="pickAvatar()">📷 ${S.avatar?'Сменить фото':'Поставить фото'}</button>${S.avatar?'<button class="g" onclick="delAvatar()">Убрать фото</button>':''}</div>
  <div class="stats"><div class="stat"><b>⭐ ${S.bal}</b><span>Баланс</span></div><div class="stat"><b>${inv.length}</b><span>Предметов</span></div><div class="stat"><b>${S.opens}</b><span>Открыто кейсов</span></div><div class="stat"><b>⭐ ${S.donated}</b><span>Задоначено</span></div></div>`
  +sg+(psub=='inv'?invView():balView())+`<button class="g" style="width:100%;margin-top:16px" onclick="logout()">Выйти</button>`}
 function invView(){return (S.inv.length?`<div class="igrid">`+S.inv.map(i=>`<div class="inv t${tier(i.value)}"><div class="ph">${imgTag(i.img,IC[tier(i.value)])}</div><b>${esc(i.name)}</b><div class="mu">${i.value} ⭐</div><button onclick="sell(${i.id})">Продать ${Math.floor(i.value*(100-S.cfg.sell_fee)/100)}</button><button class="g" onclick="act('inv/withdraw',{id:${i.id}},()=>'Заявка на вывод предмета отправлена')">Вывести</button></div>`).join('')+`</div>`:'<div class="card mu">Инвентарь пуст</div>')+`<div class="mu" style="margin-top:8px">Комиссия продажи: ${S.cfg.sell_fee}%</div>`+myReqs()}
@@ -296,6 +315,8 @@ function addBadge(){EB.push({id:0,name:'Новый бейдж',icon:'🏅',img:'
 function saveBadge(i){const b=EB[i];act('admin/badge',{id:b.id,name:b.name,icon:b.icon,img:b.img||'',color:b.color},()=>'Бейдж сохранён')}
 function delBadge(i){if(EB[i].id)act('admin/badge/delete',{id:EB[i].id},()=>'Бейдж удалён');else{EB.splice(i,1);render()}}
 async function giveBadge(rm){try{await api('admin/badge/give',{user:BGU,badge:+BGB,remove:rm?1:0});msg=`<span class="ok">${rm?'Бейдж забран':'Бейдж выдан'}: @${esc(BGU.replace(/^@/,''))}</span>`}catch(e){msg=er(e)}render()}
+async function giveStars(rm){try{const d=await api('admin/give',{user:GVU,amount:GVA,remove:rm?1:0});msg=`<span class="ok">${rm?'Забрано':'Выдано'} ${Math.floor(+GVA)} ⭐ ${rm?'у игрока':'игроку'} @${esc(GVU.replace(/^@/,''))}. Теперь у него ${d.bal} ⭐</span>`;GVA=''}catch(e){msg=er(e)}render()}
+async function resetAv(){try{await api('admin/avatar/reset',{user:RAU});msg=`<span class="ok">Аватарка @${esc(RAU.replace(/^@/,''))} сброшена</span>`}catch(e){msg=er(e)}render()}
 function saveWheel(){act('admin/wheel',{items:EW.items.map(mapIt)},()=>'Колесо сохранено')}
 function delCase(ci){if(EC[ci].id)act('admin/case/delete',{id:EC[ci].id},()=>'Кейс удалён');else{EC.splice(ci,1);render()}}
 const FLD=[['site','Название сайта','t'],['dep_fee','Комиссия пополнения %'],['sell_fee','Комиссия продажи % (идёт на @gold)'],['dmin','Минимальное пополнение ⭐'],['wmin','Минимальный вывод ⭐'],['code_ttl','Срок жизни кода верификации, минут (1–1440)'],['on_cases','Кейсы включены (1 или 0)'],['on_rocket','Rockets включена (1 или 0)'],['on_mines','Сапёр включён (1 или 0)'],['on_wheel','Колесо включено (1 или 0)'],['wheel_price','Колесо: цена платной прокрутки ⭐ (0 = только бесплатная)'],['wheel_free','Колесо: бесплатная прокрутка (1 или 0)'],['wheel_cd','Колесо: интервал бесплатной прокрутки, часов (1–720)'],['rtp','Rockets: возврат игрокам % (50–100)'],['r1','Rockets: шанс краша на 1.00x % (0–90)'],['rmax','Rockets: максимальный множитель'],['rbmin','Rockets: минимальная ставка'],['rbmax','Rockets: максимальная ставка'],['mn','Сапёр: размер поля (3–7)'],['mmin','Сапёр: минимум мин'],['mmax','Сапёр: максимум мин'],['mrtp','Сапёр: возврат игрокам % (50–100)'],['mbmin','Сапёр: минимальная ставка'],['mbmax','Сапёр: максимальная ставка'],['mcap','Сапёр: максимальный множитель'],['bot','Юз бота','t'],['recv','Аккаунт для пополнения (режим без бота)','t']];
@@ -311,11 +332,13 @@ function admView(){
  ${c.items.map((i,ii)=>`<div class="it">${thumb(i.img,'i',ci,ii)}<input value="${esc(i.name)}" onchange="EC[${ci}].items[${ii}].name=this.value"><input class="sm" type="number" value="${i.value}" onchange="EC[${ci}].items[${ii}].value=+this.value"><input class="sm" type="number" step="0.01" value="${pc(c,i)}" onchange="setPct(${ci},${ii},+this.value)"><button class="g sm" style="width:40px;padding:8px 0" onclick="delItem(${ci},${ii})">✕</button></div>`).join('')}
  <div class="row" style="margin-top:8px"><button class="g" onclick="addItem(${ci})">+ приз</button><button onclick="saveCase(${ci})">Сохранить</button><button class="r" onclick="delCase(${ci})">Удалить</button></div></div>`).join('');
  h+=`<button style="width:100%" onclick="EC.push({id:0,name:'Новый кейс',price:10,img:'',items:[{name:'Приз',value:10,w:100,img:''}]});render()">+ Новый кейс</button>`;
-h+=`<h3 style="margin-top:18px">🏅 Бейджи</h3><div class="card"><div class="mu">Фото (или смайлик) · название · цвет. Бейдж создаётся здесь, потом выдаётся игроку по юзернейму. Одному игроку можно выдать несколько бейджей.</div>`
+if(S.owner)h+=`<h3 style="margin-top:18px">⭐ Выдать звёзды</h3><div class="card"><div class="mu">Звёзды сразу выдаются на баланс игрока или забираются с него. Только для владельца.</div><input placeholder="@username игрока" value="${esc(GVU)}" oninput="GVU=this.value" autocapitalize="none"><input type="number" inputmode="numeric" min="1" placeholder="Сколько звёзд" value="${esc(GVA)}" oninput="GVA=this.value"><div class="row" style="margin-top:6px"><button onclick="giveStars(0)">Выдать</button><button class="g" onclick="giveStars(1)">Забрать</button></div></div>`;
+ h+=`<h3 style="margin-top:18px">🏅 Бейджи</h3><div class="card"><div class="mu">Фото (или смайлик) · название · цвет. Бейдж создаётся здесь, потом выдаётся игроку по юзернейму. Одному игроку можно выдать несколько бейджей.</div>`
  +EB.map((b,i)=>`<div style="border-top:1px solid var(--bd);margin-top:8px;padding-top:8px"><div class="it">${thumb(b.img,'b',i,0)}<input style="width:54px;flex:none;text-align:center" maxlength="8" placeholder="🏅" value="${esc(b.icon)}" onchange="EB[${i}].icon=this.value"><input value="${esc(b.name)}" maxlength="24" onchange="EB[${i}].name=this.value"><input class="clr" type="color" value="${esc(b.color)}" onchange="EB[${i}].color=this.value;render()"></div><div class="bdgs">${bdg(b)}</div><div class="row"><button onclick="saveBadge(${i})">Сохранить</button><button class="r" onclick="delBadge(${i})">Удалить</button></div></div>`).join('')
  +`<button class="g" style="width:100%;margin-top:10px" onclick="addBadge()">+ Новый бейдж</button></div>`
  +(EB.some(b=>b.id)?`<div class="card"><b>Выдать или забрать бейдж</b><input placeholder="@username игрока" value="${esc(BGU)}" oninput="BGU=this.value" autocapitalize="none"><select onchange="BGB=this.value">${EB.filter(b=>b.id).map(b=>`<option value="${b.id}" ${b.id==BGB?'selected':''}>${esc((b.icon||'')+' '+b.name)}</option>`).join('')}</select><div class="row" style="margin-top:6px"><button onclick="giveBadge(0)">Выдать</button><button class="g" onclick="giveBadge(1)">Забрать</button></div></div>`:'')
 ;
+  h+=`<div class="card"><b>Модерация аватарок</b><div class="mu">Игроки сами ставят фото профиля. Если фото нарушает правила, сбросьте его по юзернейму.</div><input placeholder="@username игрока" value="${esc(RAU)}" oninput="RAU=this.value" autocapitalize="none"><button class="g" style="width:100%;margin-top:6px" onclick="resetAv()">Сбросить аватарку</button></div>`;
   const c=A.cfg;
  h+=`<div class="card" style="margin-top:14px"><b>Настройки</b>${FLD.map(([k,l,t])=>`<div class="mu" style="margin-top:6px">${l}</div><input id="cf_${k}" ${t?'':'type="number"'} value="${esc(c[k])}">`).join('')}<button style="margin-top:8px" onclick="saveCfg()">Сохранить</button></div>`;
  h+=`<div class="card"><b>Коды верификации (${(A.vr||[]).length})</b><div class="mu">Отправьте код человеку в Unixgram со своего аккаунта на указанный юзернейм и нажмите ✓.</div>${(A.vr||[]).map(v=>`<div class="it"><span style="flex:1">@${esc(v.username)}: <b>${esc(v.code)}</b></span><button class="sm" onclick="vSent('${esc(v.username)}')">✓</button></div>`).join('')||'<div class="mu">Нет новых</div>'}<button class="g" onclick="loadAdmin()">Обновить</button></div>`;
