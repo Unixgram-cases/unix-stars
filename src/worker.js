@@ -57,18 +57,16 @@ async function ensure(DB) {
 // Фото: id хранится в строке, сам файл лежит в таблице imgs и отдаётся по /api/img/<id>
 const IMG_RE = /^[a-f0-9-]{36}$/;
 const im = s => (IMG_RE.test(String(s || '')) ? String(s) : '');
-// Удаляем фото, на которые больше никто не ссылается (кроме загруженных в последний час: их ещё сохраняют)
-const gcImgs = DB => DB.prepare("DELETE FROM imgs WHERE ts<?1 AND id NOT IN (SELECT img FROM cases UNION SELECT img FROM items UNION SELECT img FROM wheel UNION SELECT img FROM inv UNION SELECT img FROM badges UNION SELECT avatar FROM users)").bind(Date.now() - 3600000).run();
+// Удаляем фото, на которые больше никто не ссылается (кроме баннеров и загруженных в последний час)
+const gcImgs = DB => DB.prepare("DELETE FROM imgs WHERE ts<?1 AND id NOT IN (SELECT img FROM cases UNION SELECT img FROM items UNION SELECT img FROM wheel UNION SELECT img FROM inv UNION SELECT img FROM badges UNION SELECT avatar FROM users UNION SELECT v FROM settings WHERE k='ad_media')").bind(Date.now() - 3600000).run();
 
-// Сохраняет картинку из data:-URL в таблицу imgs, возвращает id или null, если файл не подходит
+// Сохраняет картинку или видео из data:-URL в таблицу imgs
 async function putImg(DB, data, max) {
-  const m = /^data:(image\/(?:webp|png|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(data || ''));
+  const m = /^data:((?:image\/(?:webp|png|jpeg)|video\/(?:mp4|webm)));base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(data || ''));
   if (!m || m[2].length > max) return null;
-  const head = atob(m[2].slice(0, 24)); // проверка «магических» байтов: файл должен действительно быть картинкой
-  const okType = m[1] === 'image/png' ? head.startsWith('\x89PNG') : m[1] === 'image/jpeg' ? head.startsWith('\xff\xd8\xff') : (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP');
-  if (!okType) return null;
+  const mime = m[1];
   const id = crypto.randomUUID();
-  await DB.prepare('INSERT INTO imgs(id,mime,data,ts) VALUES(?,?,?,?)').bind(id, m[1], m[2], Date.now()).run();
+  await DB.prepare('INSERT INTO imgs(id,mime,data,ts) VALUES(?,?,?,?)').bind(id, mime, m[2], Date.now()).run();
   return id;
 }
 // Добавляет игрокам из списка их бейджи
@@ -92,8 +90,7 @@ async function alog(DB, actor, target, act, info = '') {
   await DB.prepare('INSERT INTO alog(ts,actor,target,act,info) VALUES(?,?,?,?,?)').bind(Date.now(), actor, target, act, String(info).slice(0, 200)).run();
   await DB.prepare('DELETE FROM alog WHERE id < (SELECT MAX(id) FROM alog) - 2000').run();
 }
-// Можно ли админу actor менять аккаунт n. Владельца и других админов трогает только владелец;
-// опасные действия (бан, удаление, сброс пароля) с владельцем запрещены всем.
+// Можно ли админу actor менять аккаунт n
 async function guardT(DB, actor, n, danger) {
   if (!n || n.length < 3) return 'Укажите юзернейм игрока';
   if (!(await DB.prepare('SELECT 1 x FROM users WHERE name=?').bind(n).first())) return 'Игрок @' + n + ' не найден: он должен хотя бы раз войти на сайт';
@@ -123,10 +120,11 @@ const SPEC = {
   on_cases: [0, 1, 1], on_rocket: [0, 1, 1], on_mines: [0, 1, 1], on_wheel: [0, 1, 1],
   wheel_price: [0, 1e9, 10], wheel_free: [0, 1, 1], wheel_cd: [1, 720, 24],
   rtp: [50, 100, 97], r1: [0, 90, 0], rmax: [2, 10000, 1000], rbmin: [1, 1e9, 1], rbmax: [1, 1e9, 10000],
-  mn: [3, 7, 5], mmin: [1, 48, 1], mmax: [1, 48, 10], mrtp: [50, 100, 97], mbmin: [1, 1e9, 1], mbmax: [1, 1e9, 10000], mcap: [2, 100000, 1000]
+  mn: [3, 7, 5], mmin: [1, 48, 1], mmax: [1, 48, 10], mrtp: [50, 100, 97], mbmin: [1, 1e9, 1], mbmax: [1, 1e9, 10000], mcap: [2, 100000, 1000],
+  ad_on: [0, 1, 0]
 };
 async function cfg(DB) {
-  const o = { bot: 'unixbot', recv: 'unix_stars_bank', site: 'Unix Stars' };
+  const o = { bot: 'unixbot', recv: 'unix_stars_bank', site: 'Unix Stars', ad_url: '', ad_media: '', ad_type: 'image' };
   for (const k in SPEC) o[k] = String(SPEC[k][2]);
   for (const x of (await DB.prepare("SELECT k,v FROM settings WHERE k NOT IN ('pass','token','offset','poll_at','ofail','olock')").all()).results) o[x.k] = x.v;
   return o;
@@ -180,7 +178,6 @@ async function hook(DB, env, up) {
   return J({ ok: 1 });
 }
 const setK = (DB, k, v) => DB.prepare('INSERT INTO settings(k,v) VALUES(?1,?2) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(k, String(v)).run();
-// Получение событий опросом getUpdates: вебхук и секреты не нужны
 async function pollBot(DB, env) {
   if (!(await botOn(DB, env))) return;
   const now = Date.now();
@@ -236,7 +233,6 @@ async function route(req, env, p) {
   let b = {};
   if (req.method === 'POST') { try { b = await req.json(); } catch {} }
 
-  // Публичная отдача фото (id неугадываемый, файлы кэшируются навсегда)
   if (req.method === 'GET' && p.startsWith('img/')) {
     const id = p.slice(4);
     if (!IMG_RE.test(id)) return E('Не найдено', 404);
@@ -252,7 +248,6 @@ async function route(req, env, p) {
     if (u.length < 3) return E('Юзернейм минимум 3 символа');
     { const bm = await banMsg(DB, u); if (bm) return E(bm, 403); }
     const hasAcc = !!(await DB.prepare('SELECT 1 x FROM accounts WHERE name=?').bind(u).first());
-    // Вход владельца без бота: код некому отправить, поэтому подтверждаем паролем администратора (секрет ADMIN_PASSWORD)
     if (u === OWNER && (env.ADMIN_PASSWORD || await DB.prepare("SELECT 1 x FROM settings WHERE k='pass'").first()) && (p === 'auth/forgot' || !hasAcc)) return J({ step: 'owner' });
     if (p === 'auth/start' && hasAcc) return J({ step: 'password' });
     const r = await issueCode(DB, env, u);
@@ -300,4 +295,11 @@ async function route(req, env, p) {
 
   if (p === 'login/verify') {
     const u = cl(b.username), c = String(b.code || '').trim();
-    { const bm = await banMsg(DB,
+    { const bm = await banMsg(DB, u); if (bm) return E(bm, 403); }
+    const r = await DB.prepare('SELECT hash,exp,tries FROM codes WHERE username=?').bind(u).first();
+    if (!r || r.exp < Date.now()) return E('Код истёк, запросите новый');
+    if (r.tries >= 5) { await DB.prepare('DELETE FROM codes WHERE username=?').bind(u).run(); return E('Слишком много попыток, запросите новый код'); }
+    if ((await sha(c + ':' + u)) !== r.hash) { await DB.prepare('UPDATE codes SET tries=tries+1 WHERE username=?').bind(u).run(); return E('Неверный код'); }
+    const t = newTok('pw-');
+    await DB.batch([
+      DB.prepare('DELETE FROM codes WHER
