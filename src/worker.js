@@ -10,9 +10,12 @@ const SPEED = 0.00012; // рост множителя Rockets: exp(SPEED * мс)
 const DDL = [
   "CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, bal INTEGER NOT NULL DEFAULT 0 CHECK(bal>=0));",
   "CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user TEXT NOT NULL, adm INTEGER NOT NULL DEFAULT 0, created INTEGER);",
-  "CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER NOT NULL);",
-  "CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL, w REAL NOT NULL);",
-  "CREATE TABLE IF NOT EXISTS inv(id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER NOT NULL, img TEXT NOT NULL DEFAULT '');",
+  "CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL, w REAL NOT NULL, img TEXT NOT NULL DEFAULT '');",
+  "CREATE TABLE IF NOT EXISTS inv(id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL, img TEXT NOT NULL DEFAULT '');",
+  "CREATE TABLE IF NOT EXISTS wheel(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, value INTEGER NOT NULL, w REAL NOT NULL, img TEXT NOT NULL DEFAULT '');",
+  "CREATE TABLE IF NOT EXISTS wspin(user TEXT PRIMARY KEY, at INTEGER NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS imgs(id TEXT PRIMARY KEY, mime TEXT NOT NULL, data TEXT NOT NULL, ts INTEGER NOT NULL);",
   "CREATE INDEX IF NOT EXISTS inv_user ON inv(user);",
   "CREATE TABLE IF NOT EXISTS reqs(id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, type TEXT NOT NULL, amount INTEGER DEFAULT 0, from_user TEXT, item_name TEXT, item_value INTEGER, status TEXT NOT NULL DEFAULT 'new', created INTEGER);",
   "CREATE INDEX IF NOT EXISTS reqs_user ON reqs(user);",
@@ -29,7 +32,23 @@ const DDL = [
   "CREATE TABLE IF NOT EXISTS vreq(username TEXT PRIMARY KEY, code TEXT NOT NULL, exp INTEGER NOT NULL, sent INTEGER NOT NULL DEFAULT 0);"
 ];
 let ready = false;
-async function ensure(DB) { if (ready) return; await DB.batch(DDL.map(q => DB.prepare(q))); ready = true; }
+// Колонки img для баз, созданных до появления фото (на новой базе ALTER просто не сработает)
+const ALTERS = [
+  "ALTER TABLE cases ADD COLUMN img TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE items ADD COLUMN img TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE inv ADD COLUMN img TEXT NOT NULL DEFAULT ''"
+];
+async function ensure(DB) {
+  if (ready) return;
+  await DB.batch(DDL.map(q => DB.prepare(q)));
+  for (const q of ALTERS) { try { await DB.prepare(q).run(); } catch {} }
+  ready = true;
+}
+// Фото: id хранится в строке, сам файл лежит в таблице imgs и отдаётся по /api/img/<id>
+const IMG_RE = /^[a-f0-9-]{36}$/;
+const im = s => (IMG_RE.test(String(s || '')) ? String(s) : '');
+// Удаляем фото, на которые больше никто не ссылается (кроме загруженных в последний час: их ещё сохраняют)
+const gcImgs = DB => DB.prepare("DELETE FROM imgs WHERE ts<?1 AND id NOT IN (SELECT img FROM cases UNION SELECT img FROM items UNION SELECT img FROM wheel UNION SELECT img FROM inv)").bind(Date.now() - 3600000).run();
 
 const ITER = 15000; // пароли игроков
 const pwHash = (pw, salt) => hash(pw, salt, ITER);
@@ -46,7 +65,8 @@ async function passOk(DB, env, pw) {
 // [мин, макс, по умолчанию] — все числовые настройки, которые меняются в админке
 const SPEC = {
   dep_fee: [0, 100, 5], sell_fee: [0, 100, 5], dmin: [0, 1e9, 0], wmin: [0, 1e9, 0], code_ttl: [1, 1440, 30],
-  on_cases: [0, 1, 1], on_rocket: [0, 1, 1], on_mines: [0, 1, 1],
+  on_cases: [0, 1, 1], on_rocket: [0, 1, 1], on_mines: [0, 1, 1], on_wheel: [0, 1, 1],
+  wheel_price: [0, 1e9, 10], wheel_free: [0, 1, 1], wheel_cd: [1, 720, 24],
   rtp: [50, 100, 97], r1: [0, 90, 0], rmax: [2, 10000, 1000], rbmin: [1, 1e9, 1], rbmax: [1, 1e9, 10000],
   mn: [3, 7, 5], mmin: [1, 48, 1], mmax: [1, 48, 10], mrtp: [50, 100, 97], mbmin: [1, 1e9, 1], mbmax: [1, 1e9, 10000], mcap: [2, 100000, 1000]
 };
@@ -160,6 +180,17 @@ async function route(req, env, p) {
   let b = {};
   if (req.method === 'POST') { try { b = await req.json(); } catch {} }
 
+  // Публичная отдача фото (id неугадываемый, файлы кэшируются навсегда)
+  if (req.method === 'GET' && p.startsWith('img/')) {
+    const id = p.slice(4);
+    if (!IMG_RE.test(id)) return E('Не найдено', 404);
+    const f = await DB.prepare('SELECT mime,data FROM imgs WHERE id=?').bind(id).first();
+    if (!f) return E('Не найдено', 404);
+    const bin = atob(f.data), arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Response(arr, { headers: { 'content-type': f.mime, 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+  }
+
   if (p === 'auth/start' || p === 'auth/forgot') {
     const u = cl(b.username);
     if (u.length < 3) return E('Юзернейм минимум 3 символа');
@@ -260,20 +291,23 @@ async function route(req, env, p) {
 
     case 'state': {
       if (await DB.prepare("SELECT 1 x FROM deposits WHERE user=? AND status='new' AND created>?").bind(u, Date.now() - 900000).first()) await pollBot(DB, env);
-      const [a, inv, cs, its, rq] = await DB.batch([
+      const [a, inv, cs, its, rq, wh, ws] = await DB.batch([
         DB.prepare('SELECT bal FROM users WHERE name=?').bind(u),
-        DB.prepare('SELECT id,name,value FROM inv WHERE user=? ORDER BY id DESC').bind(u),
-        DB.prepare('SELECT id,name,price FROM cases ORDER BY id'),
-        DB.prepare('SELECT case_id,name,value,w FROM items ORDER BY id'),
-        DB.prepare('SELECT id,type,amount,from_user,item_name,item_value,status FROM reqs WHERE user=? ORDER BY id DESC LIMIT 30').bind(u)
+        DB.prepare('SELECT id,name,value,img FROM inv WHERE user=? ORDER BY id DESC').bind(u),
+        DB.prepare('SELECT id,name,price,img FROM cases ORDER BY id'),
+        DB.prepare('SELECT case_id,name,value,w,img FROM items ORDER BY id'),
+        DB.prepare('SELECT id,type,amount,from_user,item_name,item_value,status FROM reqs WHERE user=? ORDER BY id DESC LIMIT 30').bind(u),
+        DB.prepare('SELECT id,name,value,w,img FROM wheel ORDER BY id'),
+        DB.prepare('SELECT at FROM wspin WHERE user=?').bind(u)
       ]);
-      const c = await cfg(DB), adm = await isAdm(DB, u);
+      const c = await cfg(DB), adm = await isAdm(DB, u), wcd = +c.wheel_cd * 3600000;
       return J({
         user: u, bal: a.results[0]?.bal || 0, inv: inv.results, reqs: rq.results,
         cases: cs.results.map(x => ({ ...x, items: its.results.filter(i => i.case_id === x.id) })),
+        wheel: { prizes: wh.results, price: +c.wheel_price, free: +c.wheel_free === 1, cd: +c.wheel_cd, next: ws.results[0] ? ws.results[0].at + wcd : 0, now: Date.now() },
         cfg: {
           dep_fee: +c.dep_fee, sell_fee: +c.sell_fee, bot: c.bot, recv: c.recv, botOn: await botOn(DB, env), site: c.site, dmin: +c.dmin, wmin: +c.wmin,
-          on: { cases: +c.on_cases === 1, rocket: +c.on_rocket === 1, mines: +c.on_mines === 1 },
+          on: { cases: +c.on_cases === 1, rocket: +c.on_rocket === 1, mines: +c.on_mines === 1, wheel: +c.on_wheel === 1 },
           rb: [+c.rbmin, +c.rbmax],
           m: { n: +c.mn, min: Math.max(1, +c.mmin), max: Math.min(+c.mmax, +c.mn * +c.mn - 1), bmin: +c.mbmin, bmax: +c.mbmax }
         },
@@ -285,16 +319,43 @@ async function route(req, env, p) {
       if (+(await cfg(DB)).on_cases !== 1) return E('Кейсы отключены');
       const c = await DB.prepare('SELECT id,price FROM cases WHERE id=?').bind(+b.id).first();
       if (!c) return E('Кейс не найден');
-      const its = (await DB.prepare('SELECT name,value,w FROM items WHERE case_id=?').bind(c.id).all()).results;
+      const its = (await DB.prepare('SELECT name,value,w,img FROM items WHERE case_id=?').bind(c.id).all()).results;
       const sum = its.reduce((a, x) => a + x.w, 0);
       if (!its.length || sum <= 0) return E('Кейс пуст');
       let r = rnd() * sum, it = its[its.length - 1];
       for (const i of its) { if ((r -= i.w) < 0) { it = i; break; } }
       const st = [DB.prepare('UPDATE users SET bal=bal-?1 WHERE name=?2 AND bal>=?1').bind(c.price, u)];
-      if (it.value > 0) st.push(DB.prepare('INSERT INTO inv(user,name,value) SELECT ?1,?2,?3 WHERE changes()>0').bind(u, it.name, it.value));
+      if (it.value > 0) st.push(DB.prepare('INSERT INTO inv(user,name,value,img) SELECT ?1,?2,?3,?4 WHERE changes()>0').bind(u, it.name, it.value, it.img || ''));
       const res = await DB.batch(st);
       if (!res[0].meta.changes) return E('Недостаточно звёзд');
-      return J({ item: { name: it.name, value: it.value } });
+      return J({ item: { name: it.name, value: it.value, img: it.img || '' } });
+    }
+
+    // ---------- КОЛЕСО УДАЧИ ----------
+    case 'wheel/spin': {
+      const c = await cfg(DB);
+      if (+c.on_wheel !== 1) return E('Колесо отключено');
+      const pr = (await DB.prepare('SELECT id,name,value,w,img FROM wheel ORDER BY id').all()).results;
+      const sum = pr.reduce((a, x) => a + x.w, 0);
+      if (pr.length < 2 || !(sum > 0)) return E('Колесо пока не настроено');
+      let r = rnd() * sum, idx = pr.length - 1;
+      for (let k = 0; k < pr.length; k++) { if ((r -= pr[k].w) < 0) { idx = k; break; } }
+      const it = pr[idx], now = Date.now(), cd = +c.wheel_cd * 3600000, free = !!b.free;
+      let claim;
+      if (free) {
+        if (+c.wheel_free !== 1) return E('Бесплатные прокрутки отключены');
+        // атомарно: строка обновится только если прошло достаточно времени
+        claim = DB.prepare('INSERT INTO wspin(user,at) VALUES(?1,?2) ON CONFLICT(user) DO UPDATE SET at=excluded.at WHERE wspin.at<=?3').bind(u, now, now - cd);
+      } else {
+        const price = +c.wheel_price;
+        if (!(price > 0)) return E('Платные прокрутки отключены');
+        claim = DB.prepare('UPDATE users SET bal=bal-?1 WHERE name=?2 AND bal>=?1').bind(price, u);
+      }
+      const st = [claim];
+      if (it.value > 0) st.push(DB.prepare('INSERT INTO inv(user,name,value,img) SELECT ?1,?2,?3,?4 WHERE changes()>0').bind(u, it.name, it.value, it.img || ''));
+      const res = await DB.batch(st);
+      if (!res[0].meta.changes) return E(free ? 'Бесплатная прокрутка пока недоступна' : 'Недостаточно звёзд');
+      return J({ idx, item: { name: it.name, value: it.value, img: it.img || '' }, next: free ? now + cd : undefined });
     }
 
     case 'inv/sell': {
@@ -507,22 +568,24 @@ async function route(req, env, p) {
 
     case 'admin/case': {
       const name = String(b.name || '').slice(0, 60), price = Math.floor(+b.price);
-      const its = (Array.isArray(b.items) ? b.items : []).slice(0, 50).map(i => ({ n: String(i.name || '').slice(0, 60), v: Math.max(0, Math.floor(+i.value || 0)), w: Math.max(0, +i.w || 0) }));
+      const its = (Array.isArray(b.items) ? b.items : []).slice(0, 50).map(i => ({ n: String(i.name || '').slice(0, 60), v: Math.max(0, Math.floor(+i.value || 0)), w: Math.max(0, +i.w || 0), img: im(i.img) }));
       if (!name || !(price >= 0) || !its.length) return E('Неверные данные кейса');
       const sum = its.reduce((a, x) => a + x.w, 0);
       its.forEach(x => x.w = sum > 0 ? +(x.w / sum * 100).toFixed(4) : 100 / its.length);
       let id = +b.id;
-      const ins = x => DB.prepare('INSERT INTO items(case_id,name,value,w) VALUES(?,?,?,?)').bind(id, x.n, x.v, x.w);
+      const cimg = im(b.img);
+      const ins = x => DB.prepare('INSERT INTO items(case_id,name,value,w,img) VALUES(?,?,?,?,?)').bind(id, x.n, x.v, x.w, x.img);
       if (id) {
         await DB.batch([
-          DB.prepare('UPDATE cases SET name=?,price=? WHERE id=?').bind(name, price, id),
+          DB.prepare('UPDATE cases SET name=?,price=?,img=? WHERE id=?').bind(name, price, cimg, id),
           DB.prepare('DELETE FROM items WHERE case_id=?').bind(id),
           ...its.map(ins)
         ]);
       } else {
-        id = (await DB.prepare('INSERT INTO cases(name,price) VALUES(?,?)').bind(name, price).run()).meta.last_row_id;
+        id = (await DB.prepare('INSERT INTO cases(name,price,img) VALUES(?,?,?)').bind(name, price, cimg).run()).meta.last_row_id;
         await DB.batch(its.map(ins));
       }
+      await gcImgs(DB);
       return J({ id });
     }
 
@@ -531,7 +594,34 @@ async function route(req, env, p) {
         DB.prepare('DELETE FROM items WHERE case_id=?').bind(+b.id),
         DB.prepare('DELETE FROM cases WHERE id=?').bind(+b.id)
       ]);
+      await gcImgs(DB);
       return J({ ok: 1 });
+
+    case 'admin/wheel': {
+      const its = (Array.isArray(b.items) ? b.items : []).slice(0, 12).map(i => ({ n: String(i.name || '').slice(0, 60), v: Math.max(0, Math.floor(+i.value || 0)), w: Math.max(0, +i.w || 0), img: im(i.img) }));
+      if (its.length < 2) return E('В колесе должно быть минимум 2 приза (максимум 12)');
+      if (its.some(x => !x.n)) return E('У каждого приза должно быть название');
+      const sum = its.reduce((a, x) => a + x.w, 0);
+      its.forEach(x => x.w = sum > 0 ? +(x.w / sum * 100).toFixed(4) : +(100 / its.length).toFixed(4));
+      await DB.batch([
+        DB.prepare('DELETE FROM wheel'),
+        ...its.map(x => DB.prepare('INSERT INTO wheel(name,value,w,img) VALUES(?,?,?,?)').bind(x.n, x.v, x.w, x.img))
+      ]);
+      await gcImgs(DB);
+      return J({ ok: 1 });
+    }
+
+    case 'admin/upload': {
+      const m = /^data:(image\/(?:webp|png|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(b.data || ''));
+      if (!m || m[2].length > 450000) return E('Нужна картинка webp, png или jpeg до ~300 КБ');
+      // проверка «магических» байтов: файл должен действительно быть картинкой
+      const head = atob(m[2].slice(0, 24));
+      const okType = m[1] === 'image/png' ? head.startsWith('\x89PNG') : m[1] === 'image/jpeg' ? head.startsWith('\xff\xd8\xff') : (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP');
+      if (!okType) return E('Файл не похож на картинку');
+      const id = crypto.randomUUID();
+      await DB.prepare('INSERT INTO imgs(id,mime,data,ts) VALUES(?,?,?,?)').bind(id, m[1], m[2], Date.now()).run();
+      return J({ id });
+    }
 
     case 'admin/settings': {
       const kv = {};
