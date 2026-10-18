@@ -8,7 +8,7 @@ const API = 'https://unixgram.com'; // Bot API Unixgram (формат как у 
 const SPEED = 0.00012; // рост множителя Rockets: exp(SPEED * мс)
 // Таблицы создаются сами при первом запросе: заходить в консоль Cloudflare не нужно
 const DDL = [
-  "CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, bal INTEGER NOT NULL DEFAULT 0 CHECK(bal>=0));",
+  "CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, bal INTEGER NOT NULL DEFAULT 0 CHECK(bal>=0), opens INTEGER NOT NULL DEFAULT 0, donated INTEGER NOT NULL DEFAULT 0);",
   "CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user TEXT NOT NULL, adm INTEGER NOT NULL DEFAULT 0, created INTEGER);",
   "CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER NOT NULL, img TEXT NOT NULL DEFAULT '');",
   "CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL, w REAL NOT NULL, img TEXT NOT NULL DEFAULT '');",
@@ -16,6 +16,9 @@ const DDL = [
   "CREATE TABLE IF NOT EXISTS wheel(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, value INTEGER NOT NULL, w REAL NOT NULL, img TEXT NOT NULL DEFAULT '');",
   "CREATE TABLE IF NOT EXISTS wspin(user TEXT PRIMARY KEY, at INTEGER NOT NULL);",
   "CREATE TABLE IF NOT EXISTS imgs(id TEXT PRIMARY KEY, mime TEXT NOT NULL, data TEXT NOT NULL, ts INTEGER NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS badges(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, icon TEXT NOT NULL DEFAULT '', img TEXT NOT NULL DEFAULT '', color TEXT NOT NULL DEFAULT '#2f8cff');",
+  "CREATE TABLE IF NOT EXISTS ubadges(user TEXT NOT NULL, badge INTEGER NOT NULL, PRIMARY KEY(user, badge));",
+  "CREATE INDEX IF NOT EXISTS ubadges_badge ON ubadges(badge);",
   "CREATE INDEX IF NOT EXISTS inv_user ON inv(user);",
   "CREATE TABLE IF NOT EXISTS reqs(id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, type TEXT NOT NULL, amount INTEGER DEFAULT 0, from_user TEXT, item_name TEXT, item_value INTEGER, status TEXT NOT NULL DEFAULT 'new', created INTEGER);",
   "CREATE INDEX IF NOT EXISTS reqs_user ON reqs(user);",
@@ -36,7 +39,9 @@ let ready = false;
 const ALTERS = [
   "ALTER TABLE cases ADD COLUMN img TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE items ADD COLUMN img TEXT NOT NULL DEFAULT ''",
-  "ALTER TABLE inv ADD COLUMN img TEXT NOT NULL DEFAULT ''"
+  "ALTER TABLE inv ADD COLUMN img TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN opens INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN donated INTEGER NOT NULL DEFAULT 0"
 ];
 async function ensure(DB) {
   if (ready) return;
@@ -48,7 +53,7 @@ async function ensure(DB) {
 const IMG_RE = /^[a-f0-9-]{36}$/;
 const im = s => (IMG_RE.test(String(s || '')) ? String(s) : '');
 // Удаляем фото, на которые больше никто не ссылается (кроме загруженных в последний час: их ещё сохраняют)
-const gcImgs = DB => DB.prepare("DELETE FROM imgs WHERE ts<?1 AND id NOT IN (SELECT img FROM cases UNION SELECT img FROM items UNION SELECT img FROM wheel UNION SELECT img FROM inv)").bind(Date.now() - 3600000).run();
+const gcImgs = DB => DB.prepare("DELETE FROM imgs WHERE ts<?1 AND id NOT IN (SELECT img FROM cases UNION SELECT img FROM items UNION SELECT img FROM wheel UNION SELECT img FROM inv UNION SELECT img FROM badges)").bind(Date.now() - 3600000).run();
 
 const ITER = 15000; // пароли игроков
 const pwHash = (pw, salt) => hash(pw, salt, ITER);
@@ -114,7 +119,8 @@ async function hook(DB, env, up) {
       const get = Math.floor(d.amount * (100 - +(await cfg(DB)).dep_fee) / 100);
       await DB.batch([
         DB.prepare("UPDATE deposits SET status='paid',charge=?1 WHERE id=?2 AND status='new'").bind(String(sp.telegram_payment_charge_id || ''), d.id),
-        DB.prepare('UPDATE users SET bal=bal+?1 WHERE name=?2 AND changes()>0').bind(get, d.user)
+        DB.prepare('UPDATE users SET bal=bal+?1 WHERE name=?2 AND changes()>0').bind(get, d.user),
+        DB.prepare('UPDATE users SET donated=donated+?1 WHERE name=?2 AND changes()>0').bind(d.amount, d.user)
       ]);
       try { await bot(DB, env, 'sendMessage', { chat_id: m.chat.id, text: `Зачислено ${get} ⭐` }); } catch {}
     }
@@ -291,18 +297,19 @@ async function route(req, env, p) {
 
     case 'state': {
       if (await DB.prepare("SELECT 1 x FROM deposits WHERE user=? AND status='new' AND created>?").bind(u, Date.now() - 900000).first()) await pollBot(DB, env);
-      const [a, inv, cs, its, rq, wh, ws] = await DB.batch([
-        DB.prepare('SELECT bal FROM users WHERE name=?').bind(u),
+      const [a, inv, cs, its, rq, wh, ws, bd] = await DB.batch([
+        DB.prepare('SELECT bal,opens,donated FROM users WHERE name=?').bind(u),
         DB.prepare('SELECT id,name,value,img FROM inv WHERE user=? ORDER BY id DESC').bind(u),
         DB.prepare('SELECT id,name,price,img FROM cases ORDER BY id'),
         DB.prepare('SELECT case_id,name,value,w,img FROM items ORDER BY id'),
         DB.prepare('SELECT id,type,amount,from_user,item_name,item_value,status FROM reqs WHERE user=? ORDER BY id DESC LIMIT 30').bind(u),
         DB.prepare('SELECT id,name,value,w,img FROM wheel ORDER BY id'),
-        DB.prepare('SELECT at FROM wspin WHERE user=?').bind(u)
+        DB.prepare('SELECT at FROM wspin WHERE user=?').bind(u),
+        DB.prepare('SELECT b.id,b.name,b.icon,b.img,b.color FROM badges b JOIN ubadges ub ON ub.badge=b.id WHERE ub.user=? ORDER BY b.id').bind(u)
       ]);
       const c = await cfg(DB), adm = await isAdm(DB, u), wcd = +c.wheel_cd * 3600000;
       return J({
-        user: u, bal: a.results[0]?.bal || 0, inv: inv.results, reqs: rq.results,
+        user: u, bal: a.results[0]?.bal || 0, opens: a.results[0]?.opens || 0, donated: a.results[0]?.donated || 0, badges: bd.results, inv: inv.results, reqs: rq.results,
         cases: cs.results.map(x => ({ ...x, items: its.results.filter(i => i.case_id === x.id) })),
         wheel: { prizes: wh.results, price: +c.wheel_price, free: +c.wheel_free === 1, cd: +c.wheel_cd, next: ws.results[0] ? ws.results[0].at + wcd : 0, now: Date.now() },
         cfg: {
@@ -324,7 +331,7 @@ async function route(req, env, p) {
       if (!its.length || sum <= 0) return E('Кейс пуст');
       let r = rnd() * sum, it = its[its.length - 1];
       for (const i of its) { if ((r -= i.w) < 0) { it = i; break; } }
-      const st = [DB.prepare('UPDATE users SET bal=bal-?1 WHERE name=?2 AND bal>=?1').bind(c.price, u)];
+      const st = [DB.prepare('UPDATE users SET bal=bal-?1 WHERE name=?2 AND bal>=?1').bind(c.price, u), DB.prepare('UPDATE users SET opens=opens+1 WHERE name=?1 AND changes()>0').bind(u)];
       if (it.value > 0) st.push(DB.prepare('INSERT INTO inv(user,name,value,img) SELECT ?1,?2,?3,?4 WHERE changes()>0').bind(u, it.name, it.value, it.img || ''));
       const res = await DB.batch(st);
       if (!res[0].meta.changes) return E('Недостаточно звёзд');
@@ -356,6 +363,31 @@ async function route(req, env, p) {
       const res = await DB.batch(st);
       if (!res[0].meta.changes) return E(free ? 'Бесплатная прокрутка пока недоступна' : 'Недостаточно звёзд');
       return J({ idx, item: { name: it.name, value: it.value, img: it.img || '' }, next: free ? now + cd : undefined });
+    }
+
+    // ---------- РЕЙТИНГ И ПРОФИЛИ ----------
+    case 'rating': {
+      const by = b.by === 'donated' ? 'donated' : 'opens', other = by === 'opens' ? 'donated' : 'opens';
+      const rows = (await DB.prepare(`SELECT name,opens,donated FROM users WHERE ${by}>0 ORDER BY ${by} DESC, ${other} DESC, name LIMIT 50`).all()).results;
+      const bm = {};
+      if (rows.length) {
+        const ph = rows.map((_, i) => '?' + (i + 1)).join(',');
+        const bs = (await DB.prepare(`SELECT ub.user u,b.id,b.name,b.icon,b.img,b.color FROM ubadges ub JOIN badges b ON b.id=ub.badge WHERE ub.user IN (${ph}) ORDER BY b.id`).bind(...rows.map(r => r.name)).all()).results;
+        for (const x of bs) (bm[x.u] ||= []).push({ id: x.id, name: x.name, icon: x.icon, img: x.img, color: x.color });
+      }
+      return J({ by, rows: rows.map(r => ({ ...r, badges: bm[r.name] || [] })) });
+    }
+
+    case 'profile': {
+      const n = cl(b.name);
+      const r = await DB.prepare('SELECT name,opens,donated FROM users WHERE name=?').bind(n).first();
+      if (!r) return E('Игрок не найден', 404);
+      const [top, cnt, bd] = await DB.batch([
+        DB.prepare('SELECT name,value,img FROM inv WHERE user=? ORDER BY value DESC, id DESC LIMIT 6').bind(n),
+        DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(value),0) s FROM inv WHERE user=?').bind(n),
+        DB.prepare('SELECT b.id,b.name,b.icon,b.img,b.color FROM badges b JOIN ubadges ub ON ub.badge=b.id WHERE ub.user=? ORDER BY b.id').bind(n)
+      ]);
+      return J({ name: r.name, opens: r.opens, donated: r.donated, items: cnt.results[0].n, worth: cnt.results[0].s, top: top.results, badges: bd.results, admin: await isAdm(DB, r.name) });
     }
 
     case 'inv/sell': {
@@ -544,7 +576,8 @@ async function route(req, env, p) {
       const rq = (await DB.prepare("SELECT id,user,type,amount,from_user,item_name,item_value FROM reqs WHERE status='new' ORDER BY id").all()).results;
       const ad = (await DB.prepare('SELECT name FROM admins ORDER BY name').all()).results.map(x => x.name);
       const vr = (await DB.prepare('SELECT username,code FROM vreq WHERE sent=0 AND exp>? ORDER BY exp').bind(Date.now()).all()).results;
-      return J({ reqs: rq, admins: ad, vr, cfg: await cfg(DB) });
+      const bg = (await DB.prepare('SELECT id,name,icon,img,color FROM badges ORDER BY id').all()).results;
+      return J({ reqs: rq, admins: ad, vr, badges: bg, cfg: await cfg(DB) });
     }
 
     case 'admin/vsent':
@@ -559,6 +592,7 @@ async function route(req, env, p) {
       if (q.type === 'dep' && ok) {
         const c = await cfg(DB);
         st.push(DB.prepare('UPDATE users SET bal=bal+?1 WHERE name=?2 AND changes()>0').bind(Math.floor(q.amount * (100 - +c.dep_fee) / 100), q.user));
+        st.push(DB.prepare('UPDATE users SET donated=donated+?1 WHERE name=?2 AND changes()>0').bind(q.amount, q.user));
       }
       if (!ok && q.type === 'stars') st.push(DB.prepare('UPDATE users SET bal=bal+?1 WHERE name=?2 AND changes()>0').bind(q.amount, q.user));
       if (!ok && q.type === 'item') st.push(DB.prepare('INSERT INTO inv(user,name,value) SELECT ?1,?2,?3 WHERE changes()>0').bind(q.user, q.item_name, q.item_value));
@@ -621,6 +655,41 @@ async function route(req, env, p) {
       const id = crypto.randomUUID();
       await DB.prepare('INSERT INTO imgs(id,mime,data,ts) VALUES(?,?,?,?)').bind(id, m[1], m[2], Date.now()).run();
       return J({ id });
+    }
+
+    // ---------- БЕЙДЖИ ----------
+    case 'admin/badge': {
+      const name = String(b.name || '').trim().slice(0, 24), icon = String(b.icon || '').trim().slice(0, 8), img = im(b.img);
+      const color = /^#[0-9a-f]{6}$/i.test(String(b.color || '')) ? String(b.color).toLowerCase() : '#2f8cff';
+      if (!name) return E('Укажите название бейджа');
+      let id = +b.id;
+      if (id) {
+        const r = await DB.prepare('UPDATE badges SET name=?,icon=?,img=?,color=? WHERE id=?').bind(name, icon, img, color, id).run();
+        if (!r.meta.changes) return E('Бейдж не найден');
+      } else {
+        if ((await DB.prepare('SELECT COUNT(*) n FROM badges').first()).n >= 50) return E('Максимум 50 бейджей');
+        id = (await DB.prepare('INSERT INTO badges(name,icon,img,color) VALUES(?,?,?,?)').bind(name, icon, img, color).run()).meta.last_row_id;
+      }
+      await gcImgs(DB);
+      return J({ id });
+    }
+
+    case 'admin/badge/delete':
+      await DB.batch([
+        DB.prepare('DELETE FROM ubadges WHERE badge=?').bind(+b.id),
+        DB.prepare('DELETE FROM badges WHERE id=?').bind(+b.id)
+      ]);
+      await gcImgs(DB);
+      return J({ ok: 1 });
+
+    case 'admin/badge/give': {
+      const n = cl(b.user), bid = +b.badge;
+      if (n.length < 3) return E('Укажите юзернейм игрока');
+      if (!(await DB.prepare('SELECT 1 x FROM users WHERE name=?').bind(n).first())) return E('Игрок @' + n + ' не найден: он должен хотя бы раз войти на сайт');
+      if (!(await DB.prepare('SELECT 1 x FROM badges WHERE id=?').bind(bid).first())) return E('Выберите бейдж');
+      if (b.remove) await DB.prepare('DELETE FROM ubadges WHERE user=? AND badge=?').bind(n, bid).run();
+      else await DB.prepare('INSERT OR IGNORE INTO ubadges(user,badge) VALUES(?,?)').bind(n, bid).run();
+      return J({ ok: 1 });
     }
 
     case 'admin/settings': {
