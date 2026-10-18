@@ -8,7 +8,7 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{background:var(--bg)}
 body{margin:0;min-height:100vh;color:var(--tx);font:15px/1.4 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
-.w{max-width:560px;margin:0 auto;padding:0 14px calc(96px + env(safe-area-inset-bottom,0px))}
+.w{max-width:560px;margin:0 auto;padding:0 14px calc(170px + env(safe-area-inset-bottom,0px))}
 .hdr{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:10px;margin:0 -14px;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;background:rgba(11,14,20,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--bd)}
 .logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--ac),#7db4ff);display:grid;place-items:center;font-size:19px;flex:none}
 .brand{font-weight:800;font-size:20px;letter-spacing:-.3px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -22,8 +22,8 @@ button:active{transform:scale(.96)}button:hover{filter:brightness(1.1)}button:di
 button.g{background:transparent;color:var(--tx);border:1px solid var(--bd);font-weight:600}
 button.r{background:var(--er)}
 .big{width:100%;border-radius:99px;padding:18px;font-size:19px;box-shadow:0 12px 34px rgba(47,140,255,.35)}
-input{background:var(--card2);color:var(--tx);border:1px solid var(--bd);border-radius:12px;padding:11px;font:inherit;width:100%;margin:4px 0;outline:none}
-input:focus{border-color:var(--ac)}
+input,select{background:var(--card2);color:var(--tx);border:1px solid var(--bd);border-radius:12px;padding:11px;font:inherit;width:100%;margin:4px 0;outline:none}
+input:focus,select:focus{border-color:var(--ac)}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}
 .mu{color:var(--mu);font-size:13px}.ok{color:var(--ok)}.er{color:var(--er)}
 .view{animation:fade .3s}
@@ -35,6 +35,12 @@ input:focus{border-color:var(--ac)}
 .bar button{background:none;color:var(--mu);flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:500;padding:6px 4px;border-radius:12px}
 .bar button svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .bar button.on{color:#fff}.bar button.on svg{stroke:var(--ac)}
+/* Рекламный баннер снизу над навигацией */
+.ad-banner-wrap{position:fixed;left:0;right:0;bottom:calc(60px + env(safe-area-inset-bottom,0px));z-index:4;display:flex;justify-content:center;padding:0 10px;pointer-events:none}
+.ad-banner{pointer-events:auto;width:100%;max-width:536px;height:65px;border-radius:14px;overflow:hidden;background:var(--card2);border:1px solid var(--bd);box-shadow:0 8px 20px rgba(0,0,0,.5);display:block;text-decoration:none;position:relative;transition:transform .12s}
+.ad-banner:active{transform:scale(.98)}
+.ad-banner img, .ad-banner video{width:100%;height:100%;object-fit:cover;display:block;border:0}
+.ad-tag{position:absolute;top:4px;right:6px;background:rgba(0,0,0,.65);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:.3px;backdrop-filter:blur(4px);pointer-events:none}
 /* картинки */
 .ph{width:56px;height:56px;border-radius:14px;background:var(--card2);display:grid;place-items:center;overflow:hidden;font-size:28px;flex:none}
 .ph img{width:100%;height:100%;object-fit:contain}
@@ -85,7 +91,6 @@ input:focus{border-color:var(--ac)}
 .ava.s{width:42px;height:42px;font-size:19px}
 .rn{flex:1;min-width:0}.rn .bdgs{margin:4px 0 0}
 .rv{text-align:right;flex:none}.rv b{display:block;font-size:17px}.rv span{font-size:12px;color:var(--mu)}
-select{background:var(--card2);color:var(--tx);border:1px solid var(--bd);border-radius:12px;padding:11px;font:inherit;width:100%;margin:4px 0;outline:none}
 input.clr{width:48px;flex:none;padding:2px;height:42px}
 /* игры */
 .sky{position:relative;height:260px;border-radius:18px;overflow:hidden;border:1px solid var(--bd);background:linear-gradient(180deg,#050816,#14246b);color:#fff}
@@ -140,6 +145,14 @@ const ICN={
  user:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c1-4 4-6 7.500-6s6.500 2 7.500 6"/></svg>',
  gear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.500v3M12 18.500v3M2.500 12h3M18.500 12h3M5.300 5.300l2.100 2.100M16.600 16.600l2.100 2.100M5.300 18.700l2.100-2.100M16.600 7.400l2.100-2.100"/></svg>'};
 const GAMES=['cases','rock','mines'];
+function adBannerView(){
+ if(!S||!S.cfg||!S.cfg.ad||!S.cfg.ad.on||!S.cfg.ad.media)return '';
+ const ad=S.cfg.ad, target=ad.url?`href="${esc(ad.url)}" target="_blank" rel="noopener"`:'href="javascript:void(0)"';
+ let mediaHtml='';
+ if(ad.type==='video') mediaHtml=`<video src="/api/img/${esc(ad.media)}" autoplay loop muted playsinline></video>`;
+ else mediaHtml=`<img src="/api/img/${esc(ad.media)}" alt="Реклама">`;
+ return `<div class="ad-banner-wrap"><a class="ad-banner" ${target}>${mediaHtml}<span class="ad-tag">Реклама</span></a></div>`;
+}
 function render(){
  const a=$('app');
  if(!S){a.innerHTML=loginView();return}
@@ -147,7 +160,7 @@ function render(){
  const B=(k,ic,n,on)=>`<button class="${on?'on':''}" onclick="go('${k}')">${ICN[ic]}<span>${n}</span></button>`;
  const seg=GAMES.includes(tab)?`<div class="seg">${[['cases','Кейсы'],['rock','Rockets'],['mines','Сапёр']].map(([k,n])=>`<button class="${tab==k?'on':''}" onclick="go('${k}')">${n}</button>`).join('')}</div>`:'';
  a.innerHTML=`<div class="hdr"><div class="logo">⭐</div><div class="brand">${esc(S.cfg.site)}</div><span class="chip" id="bal">⭐ ${S.bal}</span></div>
- <div class="mu" id="m" style="margin-top:8px">${msg}</div><div class="view">${seg}`+({cases:casesView,rock:rockView,mines:minesView,wheel:wheelView,rate:rateView,user:userView,prof:profView,adm:admView}[tab])()+`</div><nav class="bar">${B('cases','box','Кейсы',GAMES.includes(tab))}${B('wheel','wheel','Колесо',tab=='wheel')}${B('rate','trophy','Рейтинг',tab=='rate'||tab=='user')}${B('prof','user','Профиль',tab=='prof')}${S.canAdm?B('adm','gear','Админ',tab=='adm'):''}</nav>`;
+ <div class="mu" id="m" style="margin-top:8px">${msg}</div><div class="view">${seg}`+({cases:casesView,rock:rockView,mines:minesView,wheel:wheelView,rate:rateView,user:userView,prof:profView,adm:admView}[tab])()+`</div>`+adBannerView()+`<nav class="bar">${B('cases','box','Кейсы',GAMES.includes(tab))}${B('wheel','wheel','Колесо',tab=='wheel')}${B('rate','trophy','Рейтинг',tab=='rate'||tab=='user')}${B('prof','user','Профиль',tab=='prof')}${S.canAdm?B('adm','gear','Админ',tab=='adm'):''}</nav>`;
  if(tab=='wheel')updWheelBtn();
 }
 function loginView(){
@@ -168,10 +181,4 @@ async function logout(){try{await api('logout',{})}catch(e){}tk=null;S=null;A=nu
 const off=()=>'<div class="card mu">Игра временно отключена</div>';
 // Сапёр (все расчёты на сервере)
 let mg=null;
-function minesView(){if(!S.cfg.on.mines)return off();return `<div class="card"><div class="mgh"><span class="chip" id="mgm">x1.00</span><span class="mu">💎 множитель растёт с каждой клеткой</span></div><div class="mgrid" id="mgrid"></div><div class="mu" id="mgs"></div></div><div class="card" id="mgc"></div>`}
-function mgDraw(){const g=$('mgrid');if(!g)return;const C=S.cfg.m,N=mg?mg.size:C.n,d=Math.min(3,C.max);g.style.gridTemplateColumns=`repeat(${N},1fr)`;let h='';
- for(let i=0;i<N*N;i++){const op=mg&&mg.opened.includes(i),bm=mg&&mg.pos&&mg.pos.includes(i);
-  h+=`<button class="mc${op?' ok':''}${bm?(mg.hit===i?' hit':' dim'):''}" ${mg&&mg.run?'':'disabled'} onclick="mgOpen(${i})">${op?'💎':bm?(mg.hit===i?'💥':'💣'):''}</button>`}
- g.innerHTML=h;$('mgm').textContent='x'+(mg?mg.mult:1).toFixed(2);
- $('mgc').innerHTML=mg&&mg.run?`<button class="r" style="width:100%" onclick="mgOut()">Забрать ${Math.floor(mg.bet*mg.mult)} ⭐</button><div class="mu" style="margin-top:6px">Следующая клетка: ${mg.next?'x'+mg.next.toFixed(2):'—'}</div>`:`<input id="mb" type="number" placeholder="Ставка ${C.bmin}–${C.bmax} ⭐" value="${mg?mg.bet:Math.max(10,C.bmin)}"><div class="mu">Мин на поле: <b id="mn">${mg?mg.mc:d}</b></div><input id="mm" type="range" style="padding:0" min="${C.min}" max="${C.max}" value="${mg?mg.mc:d}" oninput="$('mn').textContent=this.value"><button style="width:100%" onclick="mgStart()">Начать игру</button>`}
-async function mgInit(){if(!S.cfg.on.mines)return;try{const d=await api('mines/status');if(d.none){if(mg&&mg.run)mg=null}else mg={...d,run:1}
+function minesView(){if(!S.cfg.on.mines)return off();return `<div class="card"><div class="mgh"><span class="chip" id="mgm">x1.00</span><span class="mu">💎 множитель растёт с каждой клеткой</span></div><div class="mgrid" id="mgrid"></div><div class="mu" id="mgs"></div></div><div class="card" id=
