@@ -8,7 +8,7 @@ const API = 'https://unixgram.com'; // Bot API Unixgram (формат как у 
 const SPEED = 0.00012; // рост множителя Rockets: exp(SPEED * мс)
 // Таблицы создаются сами при первом запросе: заходить в консоль Cloudflare не нужно
 const DDL = [
-  "CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, bal INTEGER NOT NULL DEFAULT 0 CHECK(bal>=0), opens INTEGER NOT NULL DEFAULT 0, donated INTEGER NOT NULL DEFAULT 0);",
+  "CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, bal INTEGER NOT NULL DEFAULT 0 CHECK(bal>=0), opens INTEGER NOT NULL DEFAULT 0, donated INTEGER NOT NULL DEFAULT 0, avatar TEXT NOT NULL DEFAULT '');",
   "CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user TEXT NOT NULL, adm INTEGER NOT NULL DEFAULT 0, created INTEGER);",
   "CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER NOT NULL, img TEXT NOT NULL DEFAULT '');",
   "CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL, w REAL NOT NULL, img TEXT NOT NULL DEFAULT '');",
@@ -41,7 +41,8 @@ const ALTERS = [
   "ALTER TABLE items ADD COLUMN img TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE inv ADD COLUMN img TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE users ADD COLUMN opens INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE users ADD COLUMN donated INTEGER NOT NULL DEFAULT 0"
+  "ALTER TABLE users ADD COLUMN donated INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''"
 ];
 async function ensure(DB) {
   if (ready) return;
@@ -53,7 +54,29 @@ async function ensure(DB) {
 const IMG_RE = /^[a-f0-9-]{36}$/;
 const im = s => (IMG_RE.test(String(s || '')) ? String(s) : '');
 // Удаляем фото, на которые больше никто не ссылается (кроме загруженных в последний час: их ещё сохраняют)
-const gcImgs = DB => DB.prepare("DELETE FROM imgs WHERE ts<?1 AND id NOT IN (SELECT img FROM cases UNION SELECT img FROM items UNION SELECT img FROM wheel UNION SELECT img FROM inv UNION SELECT img FROM badges)").bind(Date.now() - 3600000).run();
+const gcImgs = DB => DB.prepare("DELETE FROM imgs WHERE ts<?1 AND id NOT IN (SELECT img FROM cases UNION SELECT img FROM items UNION SELECT img FROM wheel UNION SELECT img FROM inv UNION SELECT img FROM badges UNION SELECT avatar FROM users)").bind(Date.now() - 3600000).run();
+
+// Сохраняет картинку из data:-URL в таблицу imgs, возвращает id или null, если файл не подходит
+async function putImg(DB, data, max) {
+  const m = /^data:(image\/(?:webp|png|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(data || ''));
+  if (!m || m[2].length > max) return null;
+  const head = atob(m[2].slice(0, 24)); // проверка «магических» байтов: файл должен действительно быть картинкой
+  const okType = m[1] === 'image/png' ? head.startsWith('\x89PNG') : m[1] === 'image/jpeg' ? head.startsWith('\xff\xd8\xff') : (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP');
+  if (!okType) return null;
+  const id = crypto.randomUUID();
+  await DB.prepare('INSERT INTO imgs(id,mime,data,ts) VALUES(?,?,?,?)').bind(id, m[1], m[2], Date.now()).run();
+  return id;
+}
+// Добавляет игрокам из списка их бейджи
+async function withBadges(DB, rows) {
+  const bm = {};
+  if (rows.length) {
+    const ph = rows.map((_, i) => '?' + (i + 1)).join(',');
+    const bs = (await DB.prepare(`SELECT ub.user u,b.id,b.name,b.icon,b.img,b.color FROM ubadges ub JOIN badges b ON b.id=ub.badge WHERE ub.user IN (${ph}) ORDER BY b.id`).bind(...rows.map(r => r.name)).all()).results;
+    for (const x of bs) (bm[x.u] ||= []).push({ id: x.id, name: x.name, icon: x.icon, img: x.img, color: x.color });
+  }
+  return rows.map(r => ({ ...r, badges: bm[r.name] || [] }));
+}
 
 const ITER = 15000; // пароли игроков
 const pwHash = (pw, salt) => hash(pw, salt, ITER);
@@ -298,7 +321,7 @@ async function route(req, env, p) {
     case 'state': {
       if (await DB.prepare("SELECT 1 x FROM deposits WHERE user=? AND status='new' AND created>?").bind(u, Date.now() - 900000).first()) await pollBot(DB, env);
       const [a, inv, cs, its, rq, wh, ws, bd] = await DB.batch([
-        DB.prepare('SELECT bal,opens,donated FROM users WHERE name=?').bind(u),
+        DB.prepare('SELECT bal,opens,donated,avatar FROM users WHERE name=?').bind(u),
         DB.prepare('SELECT id,name,value,img FROM inv WHERE user=? ORDER BY id DESC').bind(u),
         DB.prepare('SELECT id,name,price,img FROM cases ORDER BY id'),
         DB.prepare('SELECT case_id,name,value,w,img FROM items ORDER BY id'),
@@ -309,7 +332,7 @@ async function route(req, env, p) {
       ]);
       const c = await cfg(DB), adm = await isAdm(DB, u), wcd = +c.wheel_cd * 3600000;
       return J({
-        user: u, bal: a.results[0]?.bal || 0, opens: a.results[0]?.opens || 0, donated: a.results[0]?.donated || 0, badges: bd.results, inv: inv.results, reqs: rq.results,
+        user: u, bal: a.results[0]?.bal || 0, opens: a.results[0]?.opens || 0, donated: a.results[0]?.donated || 0, avatar: a.results[0]?.avatar || '', badges: bd.results, inv: inv.results, reqs: rq.results,
         cases: cs.results.map(x => ({ ...x, items: its.results.filter(i => i.case_id === x.id) })),
         wheel: { prizes: wh.results, price: +c.wheel_price, free: +c.wheel_free === 1, cd: +c.wheel_cd, next: ws.results[0] ? ws.results[0].at + wcd : 0, now: Date.now() },
         cfg: {
@@ -368,26 +391,38 @@ async function route(req, env, p) {
     // ---------- РЕЙТИНГ И ПРОФИЛИ ----------
     case 'rating': {
       const by = b.by === 'donated' ? 'donated' : 'opens', other = by === 'opens' ? 'donated' : 'opens';
-      const rows = (await DB.prepare(`SELECT name,opens,donated FROM users WHERE ${by}>0 ORDER BY ${by} DESC, ${other} DESC, name LIMIT 50`).all()).results;
-      const bm = {};
-      if (rows.length) {
-        const ph = rows.map((_, i) => '?' + (i + 1)).join(',');
-        const bs = (await DB.prepare(`SELECT ub.user u,b.id,b.name,b.icon,b.img,b.color FROM ubadges ub JOIN badges b ON b.id=ub.badge WHERE ub.user IN (${ph}) ORDER BY b.id`).bind(...rows.map(r => r.name)).all()).results;
-        for (const x of bs) (bm[x.u] ||= []).push({ id: x.id, name: x.name, icon: x.icon, img: x.img, color: x.color });
-      }
-      return J({ by, rows: rows.map(r => ({ ...r, badges: bm[r.name] || [] })) });
+      const rows = (await DB.prepare(`SELECT name,opens,donated,avatar FROM users WHERE ${by}>0 ORDER BY ${by} DESC, ${other} DESC, name LIMIT 50`).all()).results;
+      return J({ by, rows: await withBadges(DB, rows) });
+    }
+
+    case 'search': {
+      const q = cl(b.q);
+      if (!q) return J({ rows: [] });
+      const e = q.replace(/_/g, '\\_'); // «_» в LIKE означает «любой символ», экранируем
+      const rows = (await DB.prepare("SELECT name,opens,donated,avatar FROM users WHERE name LIKE ?1 ESCAPE '\\' ORDER BY (name LIKE ?2 ESCAPE '\\') DESC, opens DESC, name LIMIT 20").bind('%' + e + '%', e + '%').all()).results;
+      return J({ rows: await withBadges(DB, rows) });
+    }
+
+    // Любой игрок ставит себе фото профиля (пустая data = убрать)
+    case 'avatar/set': {
+      let id = '';
+      if (b.data) { id = await putImg(DB, b.data, 200000) || ''; if (!id) return E('Нужна картинка webp, png или jpeg до ~150 КБ'); }
+      const old = (await DB.prepare('SELECT avatar FROM users WHERE name=?').bind(u).first())?.avatar || '';
+      await DB.prepare('UPDATE users SET avatar=? WHERE name=?').bind(id, u).run();
+      if (old) await DB.prepare('DELETE FROM imgs WHERE id=?').bind(old).run();
+      return J({ ok: 1, avatar: id });
     }
 
     case 'profile': {
       const n = cl(b.name);
-      const r = await DB.prepare('SELECT name,opens,donated FROM users WHERE name=?').bind(n).first();
+      const r = await DB.prepare('SELECT name,opens,donated,avatar FROM users WHERE name=?').bind(n).first();
       if (!r) return E('Игрок не найден', 404);
       const [top, cnt, bd] = await DB.batch([
         DB.prepare('SELECT name,value,img FROM inv WHERE user=? ORDER BY value DESC, id DESC LIMIT 6').bind(n),
         DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(value),0) s FROM inv WHERE user=?').bind(n),
         DB.prepare('SELECT b.id,b.name,b.icon,b.img,b.color FROM badges b JOIN ubadges ub ON ub.badge=b.id WHERE ub.user=? ORDER BY b.id').bind(n)
       ]);
-      return J({ name: r.name, opens: r.opens, donated: r.donated, items: cnt.results[0].n, worth: cnt.results[0].s, top: top.results, badges: bd.results, admin: await isAdm(DB, r.name) });
+      return J({ name: r.name, avatar: r.avatar, opens: r.opens, donated: r.donated, items: cnt.results[0].n, worth: cnt.results[0].s, top: top.results, badges: bd.results, admin: await isAdm(DB, r.name) });
     }
 
     case 'inv/sell': {
@@ -646,15 +681,17 @@ async function route(req, env, p) {
     }
 
     case 'admin/upload': {
-      const m = /^data:(image\/(?:webp|png|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(b.data || ''));
-      if (!m || m[2].length > 450000) return E('Нужна картинка webp, png или jpeg до ~300 КБ');
-      // проверка «магических» байтов: файл должен действительно быть картинкой
-      const head = atob(m[2].slice(0, 24));
-      const okType = m[1] === 'image/png' ? head.startsWith('\x89PNG') : m[1] === 'image/jpeg' ? head.startsWith('\xff\xd8\xff') : (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP');
-      if (!okType) return E('Файл не похож на картинку');
-      const id = crypto.randomUUID();
-      await DB.prepare('INSERT INTO imgs(id,mime,data,ts) VALUES(?,?,?,?)').bind(id, m[1], m[2], Date.now()).run();
+      const id = await putImg(DB, b.data, 450000);
+      if (!id) return E('Нужна картинка webp, png или jpeg до ~300 КБ');
       return J({ id });
+    }
+
+    case 'admin/avatar/reset': {
+      const n = cl(b.user), old = (await DB.prepare('SELECT avatar FROM users WHERE name=?').bind(n).first());
+      if (!old) return E('Игрок не найден');
+      await DB.prepare("UPDATE users SET avatar='' WHERE name=?").bind(n).run();
+      if (old.avatar) await DB.prepare('DELETE FROM imgs WHERE id=?').bind(old.avatar).run();
+      return J({ ok: 1 });
     }
 
     // ---------- БЕЙДЖИ ----------
@@ -690,6 +727,21 @@ async function route(req, env, p) {
       if (b.remove) await DB.prepare('DELETE FROM ubadges WHERE user=? AND badge=?').bind(n, bid).run();
       else await DB.prepare('INSERT OR IGNORE INTO ubadges(user,badge) VALUES(?,?)').bind(n, bid).run();
       return J({ ok: 1 });
+    }
+
+    // Выдача и списание звёзд по юзернейму (только владелец)
+    case 'admin/give': {
+      if (u !== OWNER) return E('Только владелец', 403);
+      const n = cl(b.user), a = Math.floor(+b.amount);
+      if (n.length < 3) return E('Укажите юзернейм игрока');
+      if (!(a >= 1 && a <= 1e9)) return E('Сумма от 1 до 1 000 000 000');
+      const ex = await DB.prepare('SELECT bal FROM users WHERE name=?').bind(n).first();
+      if (!ex) return E('Игрок @' + n + ' не найден: он должен хотя бы раз войти на сайт');
+      if (b.remove) {
+        const r = await DB.prepare('UPDATE users SET bal=bal-?1 WHERE name=?2 AND bal>=?1').bind(a, n).run();
+        if (!r.meta.changes) return E('У игрока @' + n + ' только ' + ex.bal + ' ⭐, больше забрать нельзя');
+      } else await DB.prepare('UPDATE users SET bal=bal+?1 WHERE name=?2').bind(a, n).run();
+      return J({ ok: 1, bal: (await DB.prepare('SELECT bal FROM users WHERE name=?').bind(n).first()).bal });
     }
 
     case 'admin/settings': {
