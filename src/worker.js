@@ -8,7 +8,7 @@ const API = 'https://unixgram.com'; // Bot API Unixgram (формат как у 
 const SPEED = 0.00012; // рост множителя Rockets: exp(SPEED * мс)
 // Таблицы создаются сами при первом запросе: заходить в консоль Cloudflare не нужно
 const DDL = [
-  "CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, bal INTEGER NOT NULL DEFAULT 0 CHECK(bal>=0), opens INTEGER NOT NULL DEFAULT 0, donated INTEGER NOT NULL DEFAULT 0, avatar TEXT NOT NULL DEFAULT '');",
+  "CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, bal INTEGER NOT NULL DEFAULT 0 CHECK(bal>=0), opens INTEGER NOT NULL DEFAULT 0, donated INTEGER NOT NULL DEFAULT 0, avatar TEXT NOT NULL DEFAULT '', banned INTEGER NOT NULL DEFAULT 0, ban_reason TEXT NOT NULL DEFAULT '');",
   "CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user TEXT NOT NULL, adm INTEGER NOT NULL DEFAULT 0, created INTEGER);",
   "CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER NOT NULL, img TEXT NOT NULL DEFAULT '');",
   "CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL, w REAL NOT NULL, img TEXT NOT NULL DEFAULT '');",
@@ -19,6 +19,8 @@ const DDL = [
   "CREATE TABLE IF NOT EXISTS badges(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, icon TEXT NOT NULL DEFAULT '', img TEXT NOT NULL DEFAULT '', color TEXT NOT NULL DEFAULT '#2f8cff');",
   "CREATE TABLE IF NOT EXISTS ubadges(user TEXT NOT NULL, badge INTEGER NOT NULL, PRIMARY KEY(user, badge));",
   "CREATE INDEX IF NOT EXISTS ubadges_badge ON ubadges(badge);",
+  "CREATE TABLE IF NOT EXISTS alog(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, actor TEXT NOT NULL, target TEXT NOT NULL, act TEXT NOT NULL, info TEXT NOT NULL DEFAULT '');",
+  "CREATE INDEX IF NOT EXISTS alog_target ON alog(target);",
   "CREATE INDEX IF NOT EXISTS inv_user ON inv(user);",
   "CREATE TABLE IF NOT EXISTS reqs(id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, type TEXT NOT NULL, amount INTEGER DEFAULT 0, from_user TEXT, item_name TEXT, item_value INTEGER, status TEXT NOT NULL DEFAULT 'new', created INTEGER);",
   "CREATE INDEX IF NOT EXISTS reqs_user ON reqs(user);",
@@ -42,7 +44,9 @@ const ALTERS = [
   "ALTER TABLE inv ADD COLUMN img TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE users ADD COLUMN opens INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE users ADD COLUMN donated INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''"
+  "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN ban_reason TEXT NOT NULL DEFAULT ''"
 ];
 async function ensure(DB) {
   if (ready) return;
@@ -76,6 +80,29 @@ async function withBadges(DB, rows) {
     for (const x of bs) (bm[x.u] ||= []).push({ id: x.id, name: x.name, icon: x.icon, img: x.img, color: x.color });
   }
   return rows.map(r => ({ ...r, badges: bm[r.name] || [] }));
+}
+
+// Сообщение для заблокированного игрока (null, если всё в порядке)
+async function banMsg(DB, u) {
+  const r = await DB.prepare('SELECT banned,ban_reason FROM users WHERE name=?').bind(u).first();
+  return r && r.banned ? 'Аккаунт заблокирован' + (r.ban_reason ? ': ' + r.ban_reason : '') : null;
+}
+// Запись действия админа в журнал (хранится последние 2000 записей)
+async function alog(DB, actor, target, act, info = '') {
+  await DB.prepare('INSERT INTO alog(ts,actor,target,act,info) VALUES(?,?,?,?,?)').bind(Date.now(), actor, target, act, String(info).slice(0, 200)).run();
+  await DB.prepare('DELETE FROM alog WHERE id < (SELECT MAX(id) FROM alog) - 2000').run();
+}
+// Можно ли админу actor менять аккаунт n. Владельца и других админов трогает только владелец;
+// опасные действия (бан, удаление, сброс пароля) с владельцем запрещены всем.
+async function guardT(DB, actor, n, danger) {
+  if (!n || n.length < 3) return 'Укажите юзернейм игрока';
+  if (!(await DB.prepare('SELECT 1 x FROM users WHERE name=?').bind(n).first())) return 'Игрок @' + n + ' не найден: он должен хотя бы раз войти на сайт';
+  if (n === OWNER && danger) return 'Аккаунт владельца защищён от этого действия';
+  if (actor !== OWNER) {
+    if (n === OWNER) return 'Нельзя менять аккаунт владельца';
+    if (await isAdm(DB, n)) return 'Аккаунт админа может менять только владелец';
+  }
+  return null;
 }
 
 const ITER = 15000; // пароли игроков
@@ -223,6 +250,7 @@ async function route(req, env, p) {
   if (p === 'auth/start' || p === 'auth/forgot') {
     const u = cl(b.username);
     if (u.length < 3) return E('Юзернейм минимум 3 символа');
+    { const bm = await banMsg(DB, u); if (bm) return E(bm, 403); }
     const hasAcc = !!(await DB.prepare('SELECT 1 x FROM accounts WHERE name=?').bind(u).first());
     // Вход владельца без бота: код некому отправить, поэтому подтверждаем паролем администратора (секрет ADMIN_PASSWORD)
     if (u === OWNER && (env.ADMIN_PASSWORD || await DB.prepare("SELECT 1 x FROM settings WHERE k='pass'").first()) && (p === 'auth/forgot' || !hasAcc)) return J({ step: 'owner' });
@@ -252,6 +280,7 @@ async function route(req, env, p) {
 
   if (p === 'auth/password') {
     const u = cl(b.username);
+    { const bm = await banMsg(DB, u); if (bm) return E(bm, 403); }
     const a = await DB.prepare('SELECT pw,fails,lock FROM accounts WHERE name=?').bind(u).first();
     if (!a) return E('Аккаунт не найден');
     if (a.lock > Date.now()) return E('Слишком много попыток. Подождите 15 минут или сбросьте пароль');
@@ -271,6 +300,7 @@ async function route(req, env, p) {
 
   if (p === 'login/verify') {
     const u = cl(b.username), c = String(b.code || '').trim();
+    { const bm = await banMsg(DB, u); if (bm) return E(bm, 403); }
     const r = await DB.prepare('SELECT hash,exp,tries FROM codes WHERE username=?').bind(u).first();
     if (!r || r.exp < Date.now()) return E('Код истёк, запросите новый');
     if (r.tries >= 5) { await DB.prepare('DELETE FROM codes WHERE username=?').bind(u).run(); return E('Слишком много попыток, запросите новый код'); }
@@ -391,7 +421,7 @@ async function route(req, env, p) {
     // ---------- РЕЙТИНГ И ПРОФИЛИ ----------
     case 'rating': {
       const by = b.by === 'donated' ? 'donated' : 'opens', other = by === 'opens' ? 'donated' : 'opens';
-      const rows = (await DB.prepare(`SELECT name,opens,donated,avatar FROM users WHERE ${by}>0 ORDER BY ${by} DESC, ${other} DESC, name LIMIT 50`).all()).results;
+      const rows = (await DB.prepare(`SELECT name,opens,donated,avatar FROM users WHERE banned=0 AND ${by}>0 ORDER BY ${by} DESC, ${other} DESC, name LIMIT 50`).all()).results;
       return J({ by, rows: await withBadges(DB, rows) });
     }
 
@@ -399,7 +429,7 @@ async function route(req, env, p) {
       const q = cl(b.q);
       if (!q) return J({ rows: [] });
       const e = q.replace(/_/g, '\\_'); // «_» в LIKE означает «любой символ», экранируем
-      const rows = (await DB.prepare("SELECT name,opens,donated,avatar FROM users WHERE name LIKE ?1 ESCAPE '\\' ORDER BY (name LIKE ?2 ESCAPE '\\') DESC, opens DESC, name LIMIT 20").bind('%' + e + '%', e + '%').all()).results;
+      const rows = (await DB.prepare("SELECT name,opens,donated,avatar FROM users WHERE banned=0 AND name LIKE ?1 ESCAPE '\\' ORDER BY (name LIKE ?2 ESCAPE '\\') DESC, opens DESC, name LIMIT 20").bind('%' + e + '%', e + '%').all()).results;
       return J({ rows: await withBadges(DB, rows) });
     }
 
@@ -415,8 +445,8 @@ async function route(req, env, p) {
 
     case 'profile': {
       const n = cl(b.name);
-      const r = await DB.prepare('SELECT name,opens,donated,avatar FROM users WHERE name=?').bind(n).first();
-      if (!r) return E('Игрок не найден', 404);
+      const r = await DB.prepare('SELECT name,opens,donated,avatar,banned FROM users WHERE name=?').bind(n).first();
+      if (!r || r.banned) return E('Игрок не найден', 404);
       const [top, cnt, bd] = await DB.batch([
         DB.prepare('SELECT name,value,img FROM inv WHERE user=? ORDER BY value DESC, id DESC LIMIT 6').bind(n),
         DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(value),0) s FROM inv WHERE user=?').bind(n),
@@ -729,19 +759,87 @@ async function route(req, env, p) {
       return J({ ok: 1 });
     }
 
-    // Выдача и списание звёзд по юзернейму (только владелец)
-    case 'admin/give': {
+    // ---------- УПРАВЛЕНИЕ ИГРОКАМИ ----------
+    case 'admin/users': {
+      const q = cl(b.q), cols = 'name,bal,banned,opens,donated,avatar';
+      let rows;
+      if (q) {
+        const e = q.replace(/_/g, '\\_');
+        rows = (await DB.prepare(`SELECT ${cols} FROM users WHERE name LIKE ?1 ESCAPE '\\' ORDER BY (name LIKE ?2 ESCAPE '\\') DESC, bal DESC, name LIMIT 30`).bind('%' + e + '%', e + '%').all()).results;
+      } else rows = (await DB.prepare(`SELECT ${cols} FROM users ORDER BY bal DESC, name LIMIT 30`).all()).results;
+      const t = await DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(bal),0) s, COALESCE(SUM(banned),0) b FROM users').first();
+      return J({ rows, total: { players: t.n, stars: t.s, banned: t.b } });
+    }
+
+    case 'admin/user': {
+      const n = cl(b.name);
+      const r = await DB.prepare('SELECT name,bal,opens,donated,avatar,banned,ban_reason FROM users WHERE name=?').bind(n).first();
+      if (!r) return E('Игрок не найден', 404);
+      const [inv, cnt, bd, lg, acc] = await DB.batch([
+        DB.prepare('SELECT id,name,value,img FROM inv WHERE user=? ORDER BY value DESC, id DESC LIMIT 100').bind(n),
+        DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(value),0) s FROM inv WHERE user=?').bind(n),
+        DB.prepare('SELECT b.id,b.name,b.icon,b.img,b.color FROM badges b JOIN ubadges ub ON ub.badge=b.id WHERE ub.user=? ORDER BY b.id').bind(n),
+        DB.prepare('SELECT ts,actor,act,info FROM alog WHERE target=? ORDER BY id DESC LIMIT 15').bind(n),
+        DB.prepare('SELECT 1 x FROM accounts WHERE name=?').bind(n)
+      ]);
+      return J({
+        ...r, banned: !!r.banned, admin: await isAdm(DB, n), hasPw: acc.results.length > 0,
+        inv: inv.results, items: cnt.results[0].n, worth: cnt.results[0].s, badges: bd.results, log: lg.results,
+        can: { stars: !(await guardT(DB, u, n, false)), balance: u === OWNER, danger: !(await guardT(DB, u, n, true)) }
+      });
+    }
+
+    case 'admin/user/act': {
+      const n = cl(b.name), op = String(b.op || '');
+      const OPS = ['give', 'take', 'ban', 'unban', 'resetpw', 'kick', 'delete', 'avatar', 'item'];
+      if (!OPS.includes(op)) return E('Неизвестное действие');
+      const bad = await guardT(DB, u, n, ['ban', 'unban', 'resetpw', 'kick', 'delete'].includes(op));
+      if (bad) return E(bad);
+      if (op === 'give' || op === 'take') {
+        if (u !== OWNER) return E('Выдавать и забирать звёзды может только владелец', 403);
+        const a = Math.floor(+b.amount);
+        if (!(a >= 1 && a <= 1e9)) return E('Сумма от 1 до 1 000 000 000');
+        if (op === 'give') await DB.prepare('UPDATE users SET bal=bal+?1 WHERE name=?2').bind(a, n).run();
+        else if (!(await DB.prepare('UPDATE users SET bal=bal-?1 WHERE name=?2 AND bal>=?1').bind(a, n).run()).meta.changes) {
+          return E('У игрока @' + n + ' только ' + (await DB.prepare('SELECT bal FROM users WHERE name=?').bind(n).first()).bal + ' ⭐, больше забрать нельзя');
+        }
+        await alog(DB, u, n, op, a + ' ⭐');
+      } else if (op === 'ban') {
+        const why = String(b.reason || '').trim().slice(0, 100);
+        await DB.batch([DB.prepare('UPDATE users SET banned=1,ban_reason=? WHERE name=?').bind(why, n), DB.prepare('DELETE FROM sessions WHERE user=?').bind(n)]);
+        await alog(DB, u, n, 'ban', why);
+      } else if (op === 'unban') {
+        await DB.prepare("UPDATE users SET banned=0,ban_reason='' WHERE name=?").bind(n).run();
+        await alog(DB, u, n, 'unban');
+      } else if (op === 'resetpw') {
+        await DB.batch([DB.prepare('DELETE FROM accounts WHERE name=?').bind(n), DB.prepare('DELETE FROM sessions WHERE user=?').bind(n), DB.prepare('DELETE FROM codes WHERE username=?').bind(n)]);
+        await alog(DB, u, n, 'resetpw');
+      } else if (op === 'kick') {
+        await DB.prepare('DELETE FROM sessions WHERE user=?').bind(n).run();
+        await alog(DB, u, n, 'kick');
+      } else if (op === 'avatar') {
+        const old = (await DB.prepare('SELECT avatar FROM users WHERE name=?').bind(n).first()).avatar;
+        await DB.prepare("UPDATE users SET avatar='' WHERE name=?").bind(n).run();
+        if (old) await DB.prepare('DELETE FROM imgs WHERE id=?').bind(old).run();
+        await alog(DB, u, n, 'avatar');
+      } else if (op === 'item') {
+        const it = await DB.prepare('SELECT id,name,value FROM inv WHERE id=? AND user=?').bind(+b.id, n).first();
+        if (!it) return E('Предмет не найден');
+        await DB.prepare('DELETE FROM inv WHERE id=?').bind(it.id).run();
+        await alog(DB, u, n, 'item', it.name + ' (' + it.value + ' ⭐)');
+      } else if (op === 'delete') {
+        const old = (await DB.prepare('SELECT avatar,bal FROM users WHERE name=?').bind(n).first());
+        await DB.batch(['users WHERE name', 'accounts WHERE name', 'sessions WHERE user', 'inv WHERE user', 'ubadges WHERE user', 'wspin WHERE user', 'rockets WHERE user', 'mines WHERE user', 'codes WHERE username', 'vreq WHERE username']
+          .map(t => DB.prepare('DELETE FROM ' + t + '=?').bind(n)));
+        if (old.avatar) await DB.prepare('DELETE FROM imgs WHERE id=?').bind(old.avatar).run();
+        await alog(DB, u, n, 'delete', 'баланс был ' + old.bal + ' ⭐');
+      }
+      return J({ ok: 1 });
+    }
+
+    case 'admin/log': {
       if (u !== OWNER) return E('Только владелец', 403);
-      const n = cl(b.user), a = Math.floor(+b.amount);
-      if (n.length < 3) return E('Укажите юзернейм игрока');
-      if (!(a >= 1 && a <= 1e9)) return E('Сумма от 1 до 1 000 000 000');
-      const ex = await DB.prepare('SELECT bal FROM users WHERE name=?').bind(n).first();
-      if (!ex) return E('Игрок @' + n + ' не найден: он должен хотя бы раз войти на сайт');
-      if (b.remove) {
-        const r = await DB.prepare('UPDATE users SET bal=bal-?1 WHERE name=?2 AND bal>=?1').bind(a, n).run();
-        if (!r.meta.changes) return E('У игрока @' + n + ' только ' + ex.bal + ' ⭐, больше забрать нельзя');
-      } else await DB.prepare('UPDATE users SET bal=bal+?1 WHERE name=?2').bind(a, n).run();
-      return J({ ok: 1, bal: (await DB.prepare('SELECT bal FROM users WHERE name=?').bind(n).first()).bal });
+      return J({ rows: (await DB.prepare('SELECT ts,actor,target,act,info FROM alog ORDER BY id DESC LIMIT 100').all()).results });
     }
 
     case 'admin/settings': {
