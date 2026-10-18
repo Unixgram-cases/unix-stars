@@ -67,13 +67,25 @@ input:focus{border-color:var(--ac)}
 .prof{display:flex;gap:14px;align-items:center}
 .ava{width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg,var(--ac),#8b5cf6);display:grid;place-items:center;font-size:30px;font-weight:800;flex:none}
 .badge{display:inline-block;font-size:11px;font-weight:700;color:var(--ac);border:1px solid var(--ac);border-radius:99px;padding:1px 8px;margin-left:6px;vertical-align:middle}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
 .stat{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:12px 8px;text-align:center}
 .stat b{display:block;font-size:18px}.stat span{font-size:12px;color:var(--mu)}
 .igrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .inv{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center}
 .inv .ph{width:84px;height:84px;font-size:42px}
 .inv button{width:100%;padding:9px 6px;font-size:13px}
+/* рейтинг и бейджи */
+.bdgs{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
+.bdg{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--bc);border:1px solid var(--bc);background:color-mix(in srgb,var(--bc) 14%,transparent);border-radius:99px;padding:2px 9px 2px 6px;white-space:nowrap}
+.bdg img{width:16px;height:16px;object-fit:contain}
+.rrow{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:10px 12px;margin:8px 0;cursor:pointer}
+.rrow:active{transform:scale(.985)}
+.pl{width:30px;text-align:center;font-weight:800;font-size:18px;color:var(--mu);flex:none}
+.ava.s{width:42px;height:42px;font-size:19px}
+.rn{flex:1;min-width:0}.rn .bdgs{margin:4px 0 0}
+.rv{text-align:right;flex:none}.rv b{display:block;font-size:17px}.rv span{font-size:12px;color:var(--mu)}
+select{background:var(--card2);color:var(--tx);border:1px solid var(--bd);border-radius:12px;padding:11px;font:inherit;width:100%;margin:4px 0;outline:none}
+input.clr{width:48px;flex:none;padding:2px;height:42px}
 /* игры */
 .sky{position:relative;height:260px;border-radius:18px;overflow:hidden;border:1px solid var(--bd);background:linear-gradient(180deg,#050816,#14246b);color:#fff}
 .stars{position:absolute;inset:0;opacity:.85;background-size:320px 240px;background-image:radial-gradient(2px 2px at 20px 30px,#fff,transparent),radial-gradient(1.5px 1.5px at 90px 120px,#fff,transparent),radial-gradient(2px 2px at 160px 70px,#bcd,transparent),radial-gradient(1.5px 1.5px at 230px 190px,#fff,transparent),radial-gradient(2px 2px at 300px 100px,#fff,transparent)}
@@ -105,7 +117,7 @@ input:focus{border-color:var(--ac)}
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S=null,tk=null,tab='cases',psub='inv',msg='',A=null,EC=[],EW={items:[]},rt=null,rp=null,lg=null,pl=null;
+let S=null,tk=null,tab='cases',psub='inv',msg='',A=null,EC=[],EW={items:[]},EB=[],RT=null,RBY='opens',VU=null,BGU='',BGB=0,rt=null,rp=null,lg=null,pl=null;
 try{tk=localStorage.getItem('tk')}catch(e){}
 async function api(p,b){
  const r=await fetch('/api/'+p,{method:b===undefined?'GET':'POST',headers:{'content-type':'application/json',...(tk?{authorization:'Bearer '+tk}:{})},body:b===undefined?undefined:JSON.stringify(b)});
@@ -115,14 +127,15 @@ async function api(p,b){
 const er=e=>'<span class="er">'+esc(e.message)+'</span>';
 const imgTag=(id,fb)=>id?`<img src="/api/img/${esc(id)}" alt="" loading="lazy">`:`<span>${fb}</span>`;
 async function load(){try{S=await api('state');woff=S.wheel?S.wheel.now-Date.now():0}catch(e){S=null}render()}
-async function loadAdmin(){try{A=await api('admin/data');EC=JSON.parse(JSON.stringify(S.cases));EW={items:JSON.parse(JSON.stringify(S.wheel.prizes))}}catch(e){A=null}render()}
+async function loadAdmin(){try{A=await api('admin/data');EC=JSON.parse(JSON.stringify(S.cases));EW={items:JSON.parse(JSON.stringify(S.wheel.prizes))};EB=JSON.parse(JSON.stringify(A.badges||[]));if(!EB.some(b=>b.id==BGB))BGB=EB[0]?EB[0].id:0}catch(e){A=null}render()}
 async function act(p,b,ok){try{const d=await api(p,b);msg=ok?ok(d):''}catch(e){msg=er(e)}await load();if(S&&S.adm&&tab=='adm')await loadAdmin()}
 const sm=c=>c.items.reduce((a,b)=>a+b.w,0)||1;
 const pc=(c,i)=>+(i.w/sm(c)*100).toFixed(2);
-function go(t){tab=t;msg='';if(t=='adm'&&S.adm)loadAdmin();else{render();if(t=='rock')rkInit();if(t=='mines')mgInit()}}
+function go(t){tab=t;msg='';if(t=='adm'&&S.adm)loadAdmin();else{render();if(t=='rock')rkInit();if(t=='mines')mgInit();if(t=='rate')loadRating()}}
 const ICN={
  box:'<svg viewBox="0 0 24 24"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>',
  wheel:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.4"/><path d="M12 3v6.6M12 14.4V21M3 12h6.6M14.4 12H21"/></svg>',
+ trophy:'<svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5v1.500A3 3 0 0 0 8 10.500M16 6h3v1.500a3 3 0 0 1-3 3M12 13v4M8.500 20h7M10 17h4"/></svg>',
  user:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c1-4 4-6 7.500-6s6.500 2 7.500 6"/></svg>',
  gear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.500v3M12 18.500v3M2.500 12h3M18.500 12h3M5.300 5.300l2.100 2.100M16.600 16.600l2.100 2.100M5.300 18.700l2.100-2.100M16.600 7.400l2.100-2.100"/></svg>'};
 const GAMES=['cases','rock','mines'];
@@ -133,7 +146,7 @@ function render(){
  const B=(k,ic,n,on)=>`<button class="${on?'on':''}" onclick="go('${k}')">${ICN[ic]}<span>${n}</span></button>`;
  const seg=GAMES.includes(tab)?`<div class="seg">${[['cases','Кейсы'],['rock','Rockets'],['mines','Сапёр']].map(([k,n])=>`<button class="${tab==k?'on':''}" onclick="go('${k}')">${n}</button>`).join('')}</div>`:'';
  a.innerHTML=`<div class="hdr"><div class="logo">⭐</div><div class="brand">${esc(S.cfg.site)}</div><span class="chip" id="bal">⭐ ${S.bal}</span></div>
- <div class="mu" id="m" style="margin-top:8px">${msg}</div><div class="view">${seg}`+({cases:casesView,rock:rockView,mines:minesView,wheel:wheelView,prof:profView,adm:admView}[tab])()+`</div><nav class="bar">${B('cases','box','Кейсы',GAMES.includes(tab))}${B('wheel','wheel','Колесо',tab=='wheel')}${B('prof','user','Профиль',tab=='prof')}${S.canAdm?B('adm','gear','Админ',tab=='adm'):''}</nav>`;
+ <div class="mu" id="m" style="margin-top:8px">${msg}</div><div class="view">${seg}`+({cases:casesView,rock:rockView,mines:minesView,wheel:wheelView,rate:rateView,user:userView,prof:profView,adm:admView}[tab])()+`</div><nav class="bar">${B('cases','box','Кейсы',GAMES.includes(tab))}${B('wheel','wheel','Колесо',tab=='wheel')}${B('rate','trophy','Рейтинг',tab=='rate'||tab=='user')}${B('prof','user','Профиль',tab=='prof')}${S.canAdm?B('adm','gear','Админ',tab=='adm'):''}</nav>`;
  if(tab=='wheel')updWheelBtn();
 }
 function loginView(){
@@ -216,11 +229,26 @@ async function wSpin(){if(wbusy||!S)return;const W=S.wheel,free=wFree();wbusy=1;
   el.style.transition='transform 5s cubic-bezier(.12,.7,.1,1)';el.style.transform=`rotate(${wrot}deg)`;
   setTimeout(()=>{const o=document.createElement('div');o.className='ov';o.id='ov';o.innerHTML=`<div id="rv">${resH(d.item)}</div>`;document.body.appendChild(o);try{navigator.vibrate&&navigator.vibrate(d.item.value>0?[40,40,80]:30)}catch(e){}},5300)
  }catch(e){wbusy=0;const s=$('ws');if(s)s.innerHTML=er(e);updWheelBtn()}}
+// Рейтинг и профили других игроков
+const bdg=b=>`<span class="bdg" style="--bc:${esc(b.color)}">${b.img?imgTag(b.img):esc(b.icon||'🏅')}<span>${esc(b.name)}</span></span>`;
+const lt=n=>esc(String(n).charAt(0).toUpperCase());
+async function loadRating(){try{RT=await api('rating',{by:RBY})}catch(e){RT=null;msg=er(e)}if(tab=='rate')render()}
+function setRate(by){RBY=by;RT=null;render();loadRating()}
+function rateView(){const rows=RT&&RT.by==RBY?RT.rows:null,m=['🥇','🥈','🥉'];
+ return `<h1>Рейтинг</h1><p class="sub">Нажмите на игрока, чтобы открыть его профиль</p><div class="seg"><button class="${RBY=='opens'?'on':''}" onclick="setRate('opens')">Открытия кейсов</button><button class="${RBY=='donated'?'on':''}" onclick="setRate('donated')">Донат</button></div>`
+ +(rows?(rows.length?rows.map((r,i)=>`<div class="rrow" onclick="openUser('${esc(r.name)}')"><div class="pl">${i<3?m[i]:i+1}</div><div class="ava s">${lt(r.name)}</div><div class="rn"><b>@${esc(r.name)}</b>${r.badges.length?`<div class="bdgs">${r.badges.map(bdg).join('')}</div>`:''}</div><div class="rv">${RBY=='opens'?`<b>${r.opens}</b><span>⭐ ${r.donated} донат</span>`:`<b>⭐ ${r.donated}</b><span>${r.opens} открытий</span>`}</div></div>`).join(''):'<div class="card mu">Пока никого нет</div>'):'<div class="mu">Загрузка…</div>')}
+async function openUser(n){tab='user';VU=null;msg='';render();try{VU=await api('profile',{name:n})}catch(e){msg=er(e);tab='rate'}render()}
+function userView(){if(!VU)return '<div class="mu" style="margin-top:14px">Загрузка…</div>';const u=VU;
+ return `<button class="g" style="margin:14px 0 4px" onclick="go('rate')">← Рейтинг</button><div class="card prof"><div class="ava">${lt(u.name)}</div><div style="min-width:0"><b style="font-size:20px">@${esc(u.name)}</b>${u.admin?'<span class="badge">Админ</span>':''}</div></div>
+ ${u.badges.length?`<div class="bdgs">${u.badges.map(bdg).join('')}</div>`:''}
+ <div class="stats"><div class="stat"><b>${u.opens}</b><span>Открыто кейсов</span></div><div class="stat"><b>⭐ ${u.donated}</b><span>Задоначено</span></div><div class="stat"><b>${u.items}</b><span>Предметов</span></div><div class="stat"><b>⭐ ${u.worth}</b><span>Стоимость предметов</span></div></div>`
+ +(u.top.length?`<h3 style="margin-top:16px">Лучшие предметы</h3><div class="igrid">${u.top.map(i=>`<div class="inv t${tier(i.value)}"><div class="ph">${imgTag(i.img,IC[tier(i.value)])}</div><b>${esc(i.name)}</b><div class="mu">${i.value} ⭐</div></div>`).join('')}</div>`:'')}
 // Профиль
 function profView(){const inv=S.inv,tot=inv.reduce((a,i)=>a+i.value,0);
  const sg=`<div class="seg"><button class="${psub=='inv'?'on':''}" onclick="psub='inv';render()">Инвентарь</button><button class="${psub=='bal'?'on':''}" onclick="psub='bal';render()">Баланс</button></div>`;
  return `<div class="card prof"><div class="ava">${esc(S.user.charAt(0).toUpperCase())}</div><div style="min-width:0"><b style="font-size:20px">@${esc(S.user)}</b>${S.canAdm?'<span class="badge">Админ</span>':''}<div class="mu">Игрок ${esc(S.cfg.site)}</div></div></div>
- <div class="stats"><div class="stat"><b>⭐ ${S.bal}</b><span>Баланс</span></div><div class="stat"><b>${inv.length}</b><span>Предметов</span></div><div class="stat"><b>${tot}</b><span>Стоимость</span></div></div>`
+ ${S.badges.length?`<div class="bdgs">${S.badges.map(bdg).join('')}</div>`:''}
+ <div class="stats"><div class="stat"><b>⭐ ${S.bal}</b><span>Баланс</span></div><div class="stat"><b>${inv.length}</b><span>Предметов</span></div><div class="stat"><b>${S.opens}</b><span>Открыто кейсов</span></div><div class="stat"><b>⭐ ${S.donated}</b><span>Задоначено</span></div></div>`
  +sg+(psub=='inv'?invView():balView())+`<button class="g" style="width:100%;margin-top:16px" onclick="logout()">Выйти</button>`}
 function invView(){return (S.inv.length?`<div class="igrid">`+S.inv.map(i=>`<div class="inv t${tier(i.value)}"><div class="ph">${imgTag(i.img,IC[tier(i.value)])}</div><b>${esc(i.name)}</b><div class="mu">${i.value} ⭐</div><button onclick="sell(${i.id})">Продать ${Math.floor(i.value*(100-S.cfg.sell_fee)/100)}</button><button class="g" onclick="act('inv/withdraw',{id:${i.id}},()=>'Заявка на вывод предмета отправлена')">Вывести</button></div>`).join('')+`</div>`:'<div class="card mu">Инвентарь пуст</div>')+`<div class="mu" style="margin-top:8px">Комиссия продажи: ${S.cfg.sell_fee}%</div>`+myReqs()}
 function sell(id){act('inv/sell',{id},d=>`Продано за ${d.get} ⭐`)}
@@ -249,7 +277,7 @@ function pickImg(kind,ci,ii){const f=document.createElement('input');f.type='fil
   im.onload=async()=>{try{const k=Math.min(1,256/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*k));c.height=Math.max(1,Math.round(im.height*k));c.getContext('2d').drawImage(im,0,0,c.width,c.height);
    let data=c.toDataURL('image/webp',.85);if(!data.startsWith('data:image/webp'))data=c.toDataURL('image/png');
    const d=await api('admin/upload',{data});
-   if(kind=='c')EC[ci].img=d.id;else if(kind=='i')EC[ci].items[ii].img=d.id;else EW.items[ii].img=d.id;
+   if(kind=='c')EC[ci].img=d.id;else if(kind=='i')EC[ci].items[ii].img=d.id;else if(kind=='b')EB[ci].img=d.id;else EW.items[ii].img=d.id;
    msg='<span class="ok">Фото загружено. Не забудьте нажать «Сохранить»</span>';render()}catch(e){msg=er(e);render()}URL.revokeObjectURL(url)};
   im.onerror=()=>{msg=er(new Error('Не удалось прочитать картинку'));render()};im.src=url};
  f.click()}
@@ -264,6 +292,10 @@ function addWItem(){if(EW.items.length>=12){msg=er(new Error('Максимум 1
 function delWItem(ii){EW.items.splice(ii,1);if(EW.items.length)norm(EW);render()}
 const mapIt=i=>({name:i.name,value:i.value,w:i.w,img:i.img||''});
 function saveCase(ci){const c=EC[ci];act('admin/case',{id:c.id,name:c.name,price:c.price,img:c.img||'',items:c.items.map(mapIt)},()=>'Кейс сохранён')}
+function addBadge(){EB.push({id:0,name:'Новый бейдж',icon:'🏅',img:'',color:'#2f8cff'});render()}
+function saveBadge(i){const b=EB[i];act('admin/badge',{id:b.id,name:b.name,icon:b.icon,img:b.img||'',color:b.color},()=>'Бейдж сохранён')}
+function delBadge(i){if(EB[i].id)act('admin/badge/delete',{id:EB[i].id},()=>'Бейдж удалён');else{EB.splice(i,1);render()}}
+async function giveBadge(rm){try{await api('admin/badge/give',{user:BGU,badge:+BGB,remove:rm?1:0});msg=`<span class="ok">${rm?'Бейдж забран':'Бейдж выдан'}: @${esc(BGU.replace(/^@/,''))}</span>`}catch(e){msg=er(e)}render()}
 function saveWheel(){act('admin/wheel',{items:EW.items.map(mapIt)},()=>'Колесо сохранено')}
 function delCase(ci){if(EC[ci].id)act('admin/case/delete',{id:EC[ci].id},()=>'Кейс удалён');else{EC.splice(ci,1);render()}}
 const FLD=[['site','Название сайта','t'],['dep_fee','Комиссия пополнения %'],['sell_fee','Комиссия продажи % (идёт на @gold)'],['dmin','Минимальное пополнение ⭐'],['wmin','Минимальный вывод ⭐'],['code_ttl','Срок жизни кода верификации, минут (1–1440)'],['on_cases','Кейсы включены (1 или 0)'],['on_rocket','Rockets включена (1 или 0)'],['on_mines','Сапёр включён (1 или 0)'],['on_wheel','Колесо включено (1 или 0)'],['wheel_price','Колесо: цена платной прокрутки ⭐ (0 = только бесплатная)'],['wheel_free','Колесо: бесплатная прокрутка (1 или 0)'],['wheel_cd','Колесо: интервал бесплатной прокрутки, часов (1–720)'],['rtp','Rockets: возврат игрокам % (50–100)'],['r1','Rockets: шанс краша на 1.00x % (0–90)'],['rmax','Rockets: максимальный множитель'],['rbmin','Rockets: минимальная ставка'],['rbmax','Rockets: максимальная ставка'],['mn','Сапёр: размер поля (3–7)'],['mmin','Сапёр: минимум мин'],['mmax','Сапёр: максимум мин'],['mrtp','Сапёр: возврат игрокам % (50–100)'],['mbmin','Сапёр: минимальная ставка'],['mbmax','Сапёр: максимальная ставка'],['mcap','Сапёр: максимальный множитель'],['bot','Юз бота','t'],['recv','Аккаунт для пополнения (режим без бота)','t']];
@@ -279,7 +311,12 @@ function admView(){
  ${c.items.map((i,ii)=>`<div class="it">${thumb(i.img,'i',ci,ii)}<input value="${esc(i.name)}" onchange="EC[${ci}].items[${ii}].name=this.value"><input class="sm" type="number" value="${i.value}" onchange="EC[${ci}].items[${ii}].value=+this.value"><input class="sm" type="number" step="0.01" value="${pc(c,i)}" onchange="setPct(${ci},${ii},+this.value)"><button class="g sm" style="width:40px;padding:8px 0" onclick="delItem(${ci},${ii})">✕</button></div>`).join('')}
  <div class="row" style="margin-top:8px"><button class="g" onclick="addItem(${ci})">+ приз</button><button onclick="saveCase(${ci})">Сохранить</button><button class="r" onclick="delCase(${ci})">Удалить</button></div></div>`).join('');
  h+=`<button style="width:100%" onclick="EC.push({id:0,name:'Новый кейс',price:10,img:'',items:[{name:'Приз',value:10,w:100,img:''}]});render()">+ Новый кейс</button>`;
- const c=A.cfg;
+h+=`<h3 style="margin-top:18px">🏅 Бейджи</h3><div class="card"><div class="mu">Фото (или смайлик) · название · цвет. Бейдж создаётся здесь, потом выдаётся игроку по юзернейму. Одному игроку можно выдать несколько бейджей.</div>`
+ +EB.map((b,i)=>`<div style="border-top:1px solid var(--bd);margin-top:8px;padding-top:8px"><div class="it">${thumb(b.img,'b',i,0)}<input style="width:54px;flex:none;text-align:center" maxlength="8" placeholder="🏅" value="${esc(b.icon)}" onchange="EB[${i}].icon=this.value"><input value="${esc(b.name)}" maxlength="24" onchange="EB[${i}].name=this.value"><input class="clr" type="color" value="${esc(b.color)}" onchange="EB[${i}].color=this.value;render()"></div><div class="bdgs">${bdg(b)}</div><div class="row"><button onclick="saveBadge(${i})">Сохранить</button><button class="r" onclick="delBadge(${i})">Удалить</button></div></div>`).join('')
+ +`<button class="g" style="width:100%;margin-top:10px" onclick="addBadge()">+ Новый бейдж</button></div>`
+ +(EB.some(b=>b.id)?`<div class="card"><b>Выдать или забрать бейдж</b><input placeholder="@username игрока" value="${esc(BGU)}" oninput="BGU=this.value" autocapitalize="none"><select onchange="BGB=this.value">${EB.filter(b=>b.id).map(b=>`<option value="${b.id}" ${b.id==BGB?'selected':''}>${esc((b.icon||'')+' '+b.name)}</option>`).join('')}</select><div class="row" style="margin-top:6px"><button onclick="giveBadge(0)">Выдать</button><button class="g" onclick="giveBadge(1)">Забрать</button></div></div>`:'')
+;
+  const c=A.cfg;
  h+=`<div class="card" style="margin-top:14px"><b>Настройки</b>${FLD.map(([k,l,t])=>`<div class="mu" style="margin-top:6px">${l}</div><input id="cf_${k}" ${t?'':'type="number"'} value="${esc(c[k])}">`).join('')}<button style="margin-top:8px" onclick="saveCfg()">Сохранить</button></div>`;
  h+=`<div class="card"><b>Коды верификации (${(A.vr||[]).length})</b><div class="mu">Отправьте код человеку в Unixgram со своего аккаунта на указанный юзернейм и нажмите ✓.</div>${(A.vr||[]).map(v=>`<div class="it"><span style="flex:1">@${esc(v.username)}: <b>${esc(v.code)}</b></span><button class="sm" onclick="vSent('${esc(v.username)}')">✓</button></div>`).join('')||'<div class="mu">Нет новых</div>'}<button class="g" onclick="loadAdmin()">Обновить</button></div>`;
  h+=`<div class="card"><b>Заявки (${A.reqs.length})</b>${A.reqs.map(r=>`<div class="it"><span style="flex:1">@${esc(r.user)}: ${rd2(r)}</span><button class="sm" onclick="reqAct(${r.id},1)">✓</button><button class="r sm" onclick="reqAct(${r.id},0)">✕</button></div>`).join('')||'<div class="mu">Нет новых</div>'}</div>`;
